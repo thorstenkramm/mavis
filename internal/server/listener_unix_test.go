@@ -178,10 +178,7 @@ func TestGroupSocket(t *testing.T) {
 		chmod := func(p string, m fs.FileMode) error {
 			if m == 0o660 {
 				if fail == "replacement" {
-					if err := os.Remove(p); err != nil {
-						t.Fatal(err)
-					}
-					if err := os.WriteFile(p, []byte("replacement"), 0o600); err != nil {
+					if err := os.WriteFile(path, []byte("replacement"), 0o600); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -218,6 +215,83 @@ func TestGroupSocket(t *testing.T) {
 	}
 	if int(st.Uid) != os.Geteuid() || int(st.Gid) != os.Getegid() || info.Mode().Perm() != 0o660 {
 		t.Fatalf("unexpected socket metadata: %+v", info)
+	}
+}
+
+func TestSocketPublishedAfterPermissions(t *testing.T) {
+	g, err := user.LookupGroupId(strconv.Itoa(os.Getegid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := shortSocketPath(t, "public.sock")
+	chmod := func(p string, mode fs.FileMode) error {
+		if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("public socket present during setup: %v", err)
+		}
+		parent, err := os.Stat(filepath.Dir(p))
+		if err != nil || parent.Mode().Perm()&0o077 != 0 {
+			t.Fatal("staging directory not private")
+		}
+		return os.Chmod(p, mode)
+	}
+	l, err := listenUnix(path, g.Name, os.Chown, chmod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeListener(t, l)
+	if l.Addr().String() != path {
+		t.Fatalf("address %v, want %s", l.Addr(), path)
+	}
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPublishSocketNearAddressLimit(t *testing.T) {
+	dir := filepath.Dir(shortSocketPath(t, "s"))
+	padding := len(syscall.RawSockaddrUnix{}.Path) - len(dir) - len("//s") - 2
+	if padding < 1 {
+		t.Skip("temporary directory already exceeds socket address limit")
+	}
+	parent := filepath.Join(dir, strings.Repeat("a", padding))
+	if err := os.Mkdir(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(parent, "s")
+	l, err := ListenUnix(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeListener(t, l)
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPublishSocketDoesNotOverwriteCompetingPath(t *testing.T) {
+	path := shortSocketPath(t, "collision.sock")
+	chmod := func(staged string, mode fs.FileMode) error {
+		if err := os.WriteFile(path, []byte("keep"), 0o600); err != nil {
+			return err
+		}
+		return os.Chmod(staged, mode)
+	}
+	if _, err := listenUnix(path, "", os.Chown, chmod); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("publish error: %v", err)
+	}
+	if b, err := os.ReadFile(path); err != nil || string(b) != "keep" {
+		t.Fatalf("public path changed: %q %v", b, err)
+	}
+	if files, err := os.ReadDir(filepath.Dir(path)); err != nil || len(files) != 1 {
+		t.Fatalf("staging cleanup: %v %v", files, err)
 	}
 }
 

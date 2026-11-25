@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -23,6 +24,16 @@ func parseEditTemplate(raw string) (EditTemplate, error) {
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || !slices.Contains(strings.Split(u.Path, "/"), token) {
 		return EditTemplate{}, invalid
 	}
+	// Browsers interpret a hostname ending in a numeric label as IPv4.
+	// Require canonical dotted decimal rather than accepting ambiguous
+	// abbreviated, octal or hexadecimal addresses.
+	host := strings.TrimSuffix(u.Hostname(), ".")
+	if !strings.HasPrefix(u.Host, "[") && endsInNumber(host) {
+		addr, err := netip.ParseAddr(host)
+		if err != nil || !addr.Is4() {
+			return EditTemplate{}, invalid
+		}
+	}
 	// Check the literal path as well: a percent-encoded lookalike in the
 	// path must not validate a real placeholder in the query or fragment.
 	pathAndHost, _, _ := strings.Cut(raw, "?")
@@ -36,6 +47,14 @@ func parseEditTemplate(raw string) (EditTemplate, error) {
 		}
 	}
 	return EditTemplate{before, after}, nil
+}
+
+func endsInNumber(host string) bool {
+	label := strings.ToLower(host[strings.LastIndexByte(host, '.')+1:])
+	if digits, hex := strings.CutPrefix(label, "0x"); hex {
+		return strings.Trim(digits, "0123456789abcdef") == ""
+	}
+	return label != "" && strings.Trim(label, "0123456789") == ""
 }
 
 // URL returns the edit link for an authorized, decoded root-relative file path.

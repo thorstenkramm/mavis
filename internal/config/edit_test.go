@@ -32,3 +32,16 @@ func TestEditTemplate(t *testing.T) {
 		}
 	}
 }
+
+func TestNumericEditHost(t *testing.T) {
+	for _, host := range []string{"192.168.1.300", "192.168.1.300.:8443", "192.168.01.1", "0xfffffffff"} {
+		if _, err := parseEditTemplate("https://" + host + "/edit/{path}"); err == nil {
+			t.Errorf("accepted invalid or ambiguous numeric host %s", host)
+		}
+	}
+	for _, host := range []string{"192.168.1.30:8443", "git2.example.org", "192.168.0.5.example.org", "[2001:db8::1]:8443"} {
+		if _, err := parseEditTemplate("https://" + host + "/edit/{path}"); err != nil {
+			t.Errorf("rejected host %s: %v", host, err)
+		}
+	}
+}

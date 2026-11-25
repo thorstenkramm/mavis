@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -45,20 +47,22 @@ func listenUnix(path, group string, chown func(string, int, int) error, chmod fu
 	if err := removeStaleSocket(path); err != nil {
 		return nil, err
 	}
-	listener, err := net.Listen("unix", path)
+	// Bind in an owner-only directory on the destination filesystem. This
+	// keeps even queued connections out until the final mode and GID apply,
+	// without changing the process-wide umask.
+	stage, err := os.MkdirTemp(filepath.Dir(path), ".mavis-socket-")
+	if err != nil {
+		return nil, fmt.Errorf("stage unix socket %q: %w", path, err)
+	}
+	defer removeSocketStage(stage)
+	staged := filepath.Join(stage, "s")
+	listener, err := bindStagedSocket(staged, path)
 	if err != nil {
 		return nil, fmt.Errorf("listen on unix socket %q: %w", path, err)
 	}
-	unixListener, ok := listener.(*net.UnixListener)
-	if !ok {
-		if closeErr := listener.Close(); closeErr != nil {
-			return nil, errors.Join(errors.New("unix listener has unexpected type"), closeErr)
-		}
-		return nil, errors.New("unix listener has unexpected type")
-	}
-	// Ownership-aware Close performs unlinking after checking the path identity.
-	unixListener.SetUnlinkOnClose(false)
-	info, err := os.Lstat(path)
+	listener.SetUnlinkOnClose(false)
+	defer removeSocketStage(staged)
+	info, err := os.Lstat(staged)
 	if err != nil {
 		if closeErr := listener.Close(); closeErr != nil {
 			return nil, errors.Join(fmt.Errorf("inspect unix socket %q: %w", path, err), closeErr)
@@ -66,22 +70,57 @@ func listenUnix(path, group string, chown func(string, int, int) error, chmod fu
 		return nil, fmt.Errorf("inspect unix socket %q: %w", path, err)
 	}
 	socket := &unixSocket{Listener: listener, path: path, info: info}
-	err = chmod(path, 0o600)
+	err = chmod(staged, 0o600)
 	if err == nil && gid >= 0 {
-		if err = chown(path, -1, gid); err != nil {
+		if err = chown(staged, -1, gid); err != nil {
 			err = fmt.Errorf("assign socket group %q: %w", group, err)
-		} else if err = chmod(path, 0o660); err != nil {
+		} else if err = chmod(staged, 0o660); err != nil {
 			err = fmt.Errorf("set group socket permissions: %w", err)
 		}
 	}
 	if err != nil {
-		if closeErr := socket.Close(); closeErr != nil {
-			return nil, errors.Join(fmt.Errorf("secure unix socket %q: %w", path, err), closeErr)
-		}
-		return nil, fmt.Errorf("secure unix socket %q: %w", path, err)
+		return nil, errors.Join(fmt.Errorf("secure unix socket %q: %w", path, err), listener.Close())
+	}
+	// Publish atomically without overwriting a competing listener or file.
+	if err := os.Link(staged, path); err != nil {
+		return nil, errors.Join(fmt.Errorf("publish unix socket %q: %w", path, err), listener.Close())
 	}
 	return socket, nil
 }
+
+func bindStagedSocket(staged, public string) (*net.UnixListener, error) {
+	limit := len(syscall.RawSockaddrUnix{}.Path)
+	if len(public) >= limit {
+		return nil, syscall.ENAMETOOLONG
+	}
+	if len(staged) >= limit {
+		// A valid public address may have a parent too long for the extra
+		// staging component. Bind through a short, private directory alias.
+		alias, err := os.MkdirTemp("/tmp", "mv-")
+		if err != nil {
+			return nil, err
+		}
+		defer removeSocketStage(alias)
+		dir, err := filepath.Abs(filepath.Dir(staged))
+		if err != nil {
+			return nil, err
+		}
+		if err := os.Symlink(dir, filepath.Join(alias, "d")); err != nil {
+			return nil, err
+		}
+		defer removeSocketStage(filepath.Join(alias, "d"))
+		staged = filepath.Join(alias, "d", filepath.Base(staged))
+	}
+	return net.ListenUnix("unix", &net.UnixAddr{Net: "unix", Name: staged})
+}
+
+func removeSocketStage(path string) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("clean up temporary Unix socket path: %v", err)
+	}
+}
+
+func (socket *unixSocket) Addr() net.Addr { return &net.UnixAddr{Net: "unix", Name: socket.path} }
 
 func (socket *unixSocket) Close() error {
 	socket.closeOnce.Do(func() {

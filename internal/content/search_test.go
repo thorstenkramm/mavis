@@ -294,6 +294,32 @@ func TestExcerptContextBoundedForLargeWordCounts(t *testing.T) {
 	}
 }
 
+func TestSearchVisitsLeafWithPermanentOmissionsOnce(t *testing.T) {
+	root := t.TempDir()
+	makeFile(t, filepath.Join(root, "docs/sub/.DS_Store"), "needle")
+	makeFile(t, filepath.Join(root, "docs/sub/ignored.txt"), "needle")
+	for _, link := range []string{"current", "latest"} {
+		if err := os.Symlink("docs", filepath.Join(root, link)); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+	}
+	cfg := config.Default()
+	cfg.Exclude = []string{"**/ignored.txt"}
+	r := newResolver(t, root, cfg)
+	reads := 0
+	readDir := r.readDir
+	r.readDir = func(path string) ([]os.DirEntry, error) {
+		if path == filepath.Join(r.root, "docs/sub") {
+			reads++
+		}
+		return readDir(path)
+	}
+	assertSearchPaths(t, r, "needle", nil)
+	if reads != 1 {
+		t.Fatalf("read physical leaf %d times, want once", reads)
+	}
+}
+
 func TestRestrictedAliasDoesNotHideCanonicalMatch(t *testing.T) {
 	root := t.TempDir()
 	makeFile(t, filepath.Join(root, "docs", "sub", "guide.md"), "needle")

@@ -231,7 +231,7 @@ func (resolver *Resolver) list(ctx context.Context, requestPath string) (directo
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) || !errors.Is(err, ErrNotFound) {
 				listing.incomplete = true
-			} else if !resolver.visible(logicalPath) {
+			} else if resolver.aliasMayAdmit(directory.TargetPath, logicalPath, entry) {
 				listing.logicalOmissions = true
 			}
 			continue
@@ -239,6 +239,16 @@ func (resolver *Resolver) list(ctx context.Context, requestPath string) (directo
 		listing.entries = append(listing.entries, *resource)
 	}
 	return listing, ctx.Err()
+}
+
+// An alias changes the directory prefix, not the entry name. A hidden
+// basename or an excluded physical target is therefore still ineligible.
+func (resolver *Resolver) aliasMayAdmit(parentTarget, logical string, entry fs.DirEntry) bool {
+	if logical == config.FileName || (!resolver.includeHidden && config.IsHidden(entry.Name())) || !resolver.exclusions.Excluded(logical) {
+		return false
+	}
+	// For a symlink, the physical target isn't necessarily parentTarget/name.
+	return entry.Type()&fs.ModeSymlink != 0 || !resolver.exclusions.Excluded(path.Join(parentTarget, entry.Name()))
 }
 
 func (resolver *Resolver) visible(relativePath string) bool {
