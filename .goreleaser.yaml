@@ -1,0 +1,54 @@
+# Release configuration used by .github/workflows/release.yml.
+# Local dry run: goreleaser release --snapshot --clean --skip=publish
+version: 2
+
+project_name: mavis
+
+builds:
+  - id: mavis
+    main: ./cmd/mavis
+    binary: mavis
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: mavis
+    ids: [mavis]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    wrap_in_directory: true
+    strip_binary_directory: true
+    files:
+      - README.md
+      - LICENSE
+      - docs/content
+      - testdata/docs
+
+checksum:
+  algorithm: sha256
+  split: true
+
+snapshot:
+  version_template: "{{ .Version }}-next"
+
+# GoReleaser only builds; .github/workflows/release.yml publishes after native
+# verification, so there is no release section here.
+changelog:
+  use: git
+  abbrev: 7
+  filters:
+    exclude:
+      - "^Merge "

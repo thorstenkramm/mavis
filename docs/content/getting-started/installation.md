@@ -98,8 +98,20 @@ make test
 make coverage
 ```
 
-For a release candidate, `scripts/package-release.go` creates the archive and checksum, while
-`scripts/smoke-release.go` checks its native binary. Tag-driven GitHub Actions runs these checks on all five target
-platforms before publishing.
+For a release candidate, install GoReleaser v2 and Python 3, then validate the configuration and build all five archives
+without publishing:
+
+```shell
+goreleaser check
+goreleaser release --snapshot --clean --skip=publish
+python3 scripts/format-release-checksums.py dist
+```
+
+The checksum helper verifies every digest and adds the archive filename required by the `shasum -c` and `sha256sum -c`
+commands above. `scripts/smoke-release.go` checks an extracted binary on its native operating system.
+
+Tag-driven GitHub Actions builds without publishing, verifies the packaged documentation and native binary on all five
+target platforms, and only then creates the GitHub release from those exact archives and generated release notes. Tags
+with a prerelease suffix, such as `v1.1.0-rc.1`, are published as prereleases.
 
 See [Quick start](quick-start.md) to serve your first directory.

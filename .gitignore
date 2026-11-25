@@ -37,6 +37,7 @@ go.work.sum
 /mavis
 /mavis.exe
 /coverage.out
+/dist/
 
 /docs/public/
 /docs/resources/

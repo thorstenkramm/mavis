@@ -13,7 +13,53 @@ concurrency:
 
 jobs:
   package:
-    name: package and smoke (${{ matrix.goos }}/${{ matrix.goarch }})
+    name: build release archives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Release notes are generated from the git history.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Validate release tag
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
+
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: 'v2.13.2'
+          args: release --clean --skip=publish
+
+      - name: Verify and format split checksums
+        run: python scripts/format-release-checksums.py dist
+
+      # Without an earlier tag, GoReleaser lists the entire repository history.
+      - name: Check generated release notes
+        run: |
+          if ! git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" >/dev/null 2>&1; then
+            printf '## Changelog\n\nFirst Mavis release.\n' > dist/CHANGELOG.md
+          fi
+          test -s dist/CHANGELOG.md
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+            dist/CHANGELOG.md
+          retention-days: 14
+          if-no-files-found: error
+
+  verify:
+    name: native smoke (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: package
     strategy:
       fail-fast: false
       matrix:
@@ -46,23 +92,18 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Package native release artifact
-        shell: bash
-        run: |
-          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
-          go run scripts/package-release.go \
-            -version "$GITHUB_REF_NAME" \
-            -goos "${{ matrix.goos }}" \
-            -goarch "${{ matrix.goarch }}" \
-            -output dist
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: release-files
+          path: dist
 
-      - name: Verify archive and smoke-test the extracted native binary
+      - name: Verify checksum, extract archive, and smoke-test the native binary
         shell: bash
         run: |
           base="mavis-${GITHUB_REF_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
           archive="${base}.tar.gz"
           if [[ '${{ matrix.goos }}' == windows ]]; then archive="${base}.zip"; fi
-          (cd dist && python -c 'import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); sys.exit(hashlib.sha256(p.read_bytes()).hexdigest() != pathlib.Path(str(p)+".sha256").read_text().split()[0])' "$archive")
+          python scripts/format-release-checksums.py --check --archive "$archive" dist
           mkdir unpacked
           if [[ '${{ matrix.goos }}' == windows ]]; then
             python -m zipfile -e "dist/$archive" unpacked
@@ -72,31 +113,25 @@ jobs:
           python scripts/check-packaged-docs.py "unpacked/$base"
           go run scripts/smoke-release.go -binary "unpacked/$base/${{ matrix.executable }}"
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/*.sha256
-          retention-days: 14
-          if-no-files-found: error
-
   publish:
+    name: publish verified release archives
+    needs: [package, verify]
     permissions:
       contents: write
-    name: publish release archives
-    needs: package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
         with:
-          pattern: release-*
+          name: release-files
           path: dist
-          merge-multiple: true
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
+        run: |
+          arguments=("$GITHUB_REF_NAME" --verify-tag --notes-file dist/CHANGELOG.md)
+          # Only a hyphen before any "+build" metadata marks a prerelease.
+          version="${GITHUB_REF_NAME%%+*}"
+          if [[ "$version" == *-* ]]; then arguments+=(--prerelease); fi
+          gh release create "${arguments[@]}" dist/*.tar.gz dist/*.zip dist/*.sha256

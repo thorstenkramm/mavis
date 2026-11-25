@@ -4,7 +4,10 @@ set -euo pipefail
 
 go_files=()
 while IFS= read -r file; do
-  go_files+=("$file")
+  # A cached path may have been deleted in the working tree.
+  if [[ -f "$file" ]]; then
+    go_files+=("$file")
+  fi
 done < <(git ls-files --cached --others --exclude-standard -- '*.go')
 
 if ((${#go_files[@]} == 0)); then
