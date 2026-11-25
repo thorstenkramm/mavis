@@ -36,7 +36,8 @@ Front matter has no schema, so Mavis never looks for particular keys. The collap
 number of top-level entries. Expanded, it lists every entry by structure alone: a plain value appears beside its key
 exactly as written, and a list or map appears as a collapsed branch labelled with its size that expands to the same
 layout at any depth. Empty values, lists, and maps are labelled as such, and aliases are named rather than expanded.
-**View YAML** shows the original source. Front matter that is not valid YAML appears as source only. The panel and its
+**View YAML** shows the original source. The tree is limited to 2,000 nodes and 32 levels below the root; an ellipsis marks omitted content.
+Invalid YAML (including duplicate mapping keys) and blocks larger than 1 MiB appear as source only. The panel and its
 branches work with a pointer or keyboard and without JavaScript.
 
 ## HTML safety

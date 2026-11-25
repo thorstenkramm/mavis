@@ -910,6 +910,8 @@ input {
 
 .document .directory-list {
   display: table;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
   width: 100%;
   font-size: 0.9rem;
 }

@@ -34,6 +34,15 @@
 
   const themeToggle = document.getElementById("theme-toggle");
   if (themeToggle) {
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const followSystem = () => {
+      const saved = readPreference("mavis.theme.v1");
+      if (saved !== "dark" && saved !== "light") {
+        document.documentElement.dataset.theme = systemTheme.matches ? "dark" : "light";
+      }
+    };
+    systemTheme.addEventListener("change", followSystem);
+    followSystem();
     themeToggle.addEventListener("click", () => {
       const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
       document.documentElement.dataset.theme = next;
@@ -43,12 +52,12 @@
 
   const searchInput = document.getElementById("documentation-search");
   if (searchInput) {
-    // "/" jumps to search unless the user is already typing somewhere.
+    // Alt+/ jumps to search unless the user is already typing somewhere.
     document.addEventListener("keydown", (event) => {
       const target = event.target;
       const typing = target instanceof HTMLElement &&
         (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
-      if (event.key !== "/" || typing || event.ctrlKey || event.metaKey || event.altKey) {
+      if (event.code !== "Slash" || !event.altKey || event.shiftKey || event.ctrlKey || event.metaKey || typing || searchInput.closest("[inert]")) {
         return;
       }
       event.preventDefault();

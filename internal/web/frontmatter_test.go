@@ -11,11 +11,11 @@ func TestParseFrontMatterIsSchemaFree(t *testing.T) {
 	tree, ok := parseFrontMatter("owner: someone\napprover: ''\ntags: []\nmeta: {}\ncount: 3\nnothing:\n" +
 		"gaps:\n  - field: general\n    notes: |\n      first line\n      second line\n  - plain\n" +
 		"nested:\n  deeper:\n    deepest: value\n")
-	if !ok || len(tree) != 8 {
+	if ok == 0 || len(tree) != 8 {
 		t.Fatalf("tree = %+v, ok = %v", tree, ok)
 	}
-	if frontMatterCount(tree) != "8 fields" || frontMatterCount(tree[:1]) != "1 field" {
-		t.Fatalf("count labels = %q, %q", frontMatterCount(tree), frontMatterCount(tree[:1]))
+	if frontMatterCount(ok) != "8 fields" || frontMatterCount(1) != "1 field" {
+		t.Fatalf("count labels = %q, %q", frontMatterCount(ok), frontMatterCount(1))
 	}
 	want := []frontMatterNode{
 		{Key: "owner", Value: "someone"},
@@ -49,32 +49,32 @@ func TestParseFrontMatterIsSchemaFree(t *testing.T) {
 }
 
 func TestParseFrontMatterRootShapesAndFailures(t *testing.T) {
-	if list, ok := parseFrontMatter("- one\n- two\n"); !ok || len(list) != 2 || list[1].Key != "2" {
+	if list, ok := parseFrontMatter("- one\n- two\n"); ok == 0 || len(list) != 2 || list[1].Key != "2" {
 		t.Fatalf("root list = %+v, %v", list, ok)
 	}
-	if scalar, ok := parseFrontMatter("just text\n"); !ok || len(scalar) != 1 || scalar[0].Value != "just text" {
+	if scalar, ok := parseFrontMatter("just text\n"); ok == 0 || len(scalar) != 1 || scalar[0].Value != "just text" {
 		t.Fatalf("root scalar = %+v, %v", scalar, ok)
 	}
 	for _, source := range []string{"", "# only a comment\n", "key: [unclosed\n", "~\n"} {
-		if tree, ok := parseFrontMatter(source); ok {
+		if tree, ok := parseFrontMatter(source); ok > 0 {
 			t.Errorf("parseFrontMatter(%q) = %+v, want fallback", source, tree)
 		}
 	}
 	complexKey, ok := parseFrontMatter("? [a, b]\n: value\n")
-	if !ok || complexKey[0].Key != "(complex key)" {
+	if ok == 0 || complexKey[0].Key != "(complex key)" {
 		t.Fatalf("complex key = %+v, %v", complexKey, ok)
 	}
 }
 
 func TestParseFrontMatterBoundsAliasesDepthAndSize(t *testing.T) {
 	aliases, ok := parseFrontMatter("base: &base\n  a: 1\ncopy: *base\n")
-	if !ok || aliases[1].Value != "*base" || aliases[1].Composite {
+	if ok == 0 || aliases[1].Value != "*base" || aliases[1].Composite {
 		t.Fatalf("alias was expanded: %+v", aliases)
 	}
 
 	deep := strings.Repeat("[", maxFrontMatterDepth+4) + strings.Repeat("]", maxFrontMatterDepth+4)
 	node, ok := parseFrontMatter("k: " + deep + "\n")
-	if !ok {
+	if ok == 0 {
 		t.Fatal("deep front matter was rejected")
 	}
 	current, depth := node[0], 0
@@ -90,8 +90,40 @@ func TestParseFrontMatterBoundsAliasesDepthAndSize(t *testing.T) {
 		wide.WriteString("- item\n")
 	}
 	items, ok := parseFrontMatter(wide.String())
-	if !ok || items[len(items)-1].Value != frontMatterElided || items[0].Value != "item" {
+	if ok != maxFrontMatterNodes+50 || len(items) != maxFrontMatterNodes-1 || items[len(items)-1].Value != frontMatterElided || items[0].Value != "item" {
 		t.Fatalf("oversized front matter was not elided: last = %+v", items[len(items)-1])
+	}
+}
+
+func TestNestedFrontMatterSharesOneNodeBudget(t *testing.T) {
+	source := strings.Repeat("- [a, b, c]\n", maxFrontMatterNodes)
+	tree, fields := parseFrontMatter(source)
+	nodes, markers := 0, 0
+	var walk func([]frontMatterNode)
+	walk = func(entries []frontMatterNode) {
+		for _, n := range entries {
+			nodes++
+			if n.Value == frontMatterElided {
+				markers++
+			}
+			walk(n.Children)
+		}
+	}
+	walk(tree)
+	if fields != maxFrontMatterNodes || nodes+1 != maxFrontMatterNodes || markers != 1 {
+		t.Fatalf("fields=%d nodes=%d markers=%d", fields, nodes, markers)
+	}
+}
+
+func TestDuplicateKeysFallBackToSource(t *testing.T) {
+	root := t.TempDir()
+	handler := newWebHandler(t, root, render.NewRenderer(), nil)
+	for _, source := range []string{"status: draft\nstatus: approved", "meta:\n  'status': draft\n  status: approved", "? [a, b]\n: draft\n? [a, b]\n: approved", "10: draft\n0xa: approved", "key: &k status\nstatus: draft\n*k : approved"} {
+		writeWebFile(t, root, "dup.md", "---\n"+source+"\n---\n# Title")
+		body := requestWeb(handler, "/dup.md").Body.String()
+		if strings.Contains(body, "front-matter-list") || !strings.Contains(body, `class="language-yaml"`) || !strings.Contains(body, "approved") {
+			t.Fatalf("expected original YAML alone for %q", source)
+		}
 	}
 }
 

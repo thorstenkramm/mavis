@@ -348,9 +348,9 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 		HasFrontMatter: document.HasFrontMatter,
 	}
 	if document.HasFrontMatter {
-		if tree, ok := parseFrontMatter(document.FrontMatter); ok {
+		if tree, count := parseFrontMatter(document.FrontMatter); count > 0 {
 			model.FrontMatterTree = tree
-			model.FrontMatterCount = frontMatterCount(tree)
+			model.FrontMatterCount = frontMatterCount(count)
 		}
 	}
 	handler.writePage(writer, http.StatusOK, model)

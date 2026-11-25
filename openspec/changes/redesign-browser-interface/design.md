@@ -16,7 +16,7 @@ Restyle and regroup existing controls without changing routes or access checks. 
 
 3. **Themes as token sets.** `:root` and `:root[data-theme="dark"]` define the same custom properties. A small blocking script applies the saved or system preference before first paint; the toggle stores the choice under `mavis.theme.v1`. The contrast test checks both palettes.
 
-4. **Search in the top bar.** The form, its label, its route and its no-JavaScript behavior are unchanged; only its position and size change. It moves below the logo at mobile widths. `/` focuses the field when JavaScript is available.
+4. **Search in the top bar.** The form, its label, its route and its no-JavaScript behavior are unchanged; only its position and size change. It moves below the logo at mobile widths. `Alt+/` focuses the field when JavaScript is available.
 
 5. **Target sizes.** Controls are 36 CSS pixels high on desktop and 44 at mobile widths, where touch input is expected.
 

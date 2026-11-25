@@ -27,7 +27,7 @@ func TestRootREADMEUsesDynamicSecureHTML(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<article class="document">`, `<h1 id="welcome">Welcome</h1>`, `<strong>documentation</strong>`,
-		`<title>Welcome · Mavis</title>`, `<a class="brand" href="/">`, `id="theme-toggle"`,
+		`<title>Welcome · Mavis</title>`, `<a class="brand" href="/" aria-label="Mavis home">`, `id="theme-toggle"`,
 		`aria-label="Documentation files"`, `aria-label="On this page"`, `href="#section"`,
 		`href="/_mavis/assets/app.css"`,
 	} {

@@ -4,7 +4,7 @@
 
 - [x] 1.1 Rebuild the page template: top bar with logo, search and theme switch; directory trail; compact download control; tabular directory listing.
 - [x] 1.2 Rewrite the stylesheet around light and dark token sets, a wider bounded reading column and responsive rules. Extend the contrast test to both palettes.
-- [x] 1.3 Add the early theme script, the theme toggle and the `/` search shortcut.
+- [x] 1.3 Add the early theme script, the theme toggle and the `Alt+/` search shortcut.
 
 ## 2. Front matter
 
@@ -17,4 +17,4 @@
 ## 4. Documentation and release checks
 
 - [x] 4.1 Update the guides and references, the release smoke test and the Hugo theme (green palette, logo).
-- [ ] 4.2 Repeat the four-engine browser matrix for the redesigned interface and record the result in the browser compatibility reference.
+- [x] 4.2 Repeat the four-engine browser matrix for the redesigned interface and record the result in the browser compatibility reference.

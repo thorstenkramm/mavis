@@ -94,15 +94,6 @@ root-relative paths, escaped contextual excerpts, and highlighted matches outsid
 spanned the viewport above the header, controls met the 44-pixel target minimum, and neither home nor results pages had
 horizontal overflow.
 
-## Interface redesign
-
-The redesign of **November 25, 2026** moved search into the top bar and added breadcrumbs, the front-matter tree,
-file-type icons, and light and dark themes. It was checked manually in one Chromium build at 1440×900 and 375×812:
-document, directory, and search pages in both themes, the saved theme choice across navigation, the expanded
-front-matter tree, and the absence of horizontal page overflow on mobile. Controls are 36 pixels high on desktop and
-44 pixels at mobile widths. The four-engine matrix and search verification above predate the redesign and have not
-been repeated for it.
-
 Mobile drawer checks confirmed that the search region and main content become inert, programmatic focus cannot enter the
 search field, Tab and Shift+Tab remain within the drawer, Escape closes it, and focus returns to the Files button. Axe-core
 4.11.x WCAG A/AA scans of search results and mobile navigation reported **zero violations in every engine and viewport**.
@@ -113,6 +104,16 @@ search field, Tab and Shift+Tab remain within the drawer, Escape closes it, and 
 | Microsoft Edge | 158.0.4370.33 | Passed, 4/4 check groups |
 | Firefox | 159.0 | Passed, 4/4 check groups |
 | Safari engine | WebKit 27.2 | Passed, 4/4 check groups |
+
+## Interface redesign
+
+On **November 25, 2026**, Playwright checks passed at **375×900 and 1440×900** in Chrome 158.0.8127.38,
+Edge 158.0.4370.33, Firefox 159.0, and WebKit 27.2. Each engine exposed the home link as “Mavis home” and
+kept both directory cells inside the viewport with a 100-character extension. Pages followed a live system-theme
+change and retained an explicit override across navigation. Alt+/ focused search; a plain slash did not.
+Search and the front-matter disclosure also worked with JavaScript disabled. The mobile drawer kept keyboard focus
+inside while open. Axe WCAG A/AA scans reported zero violations on directory listings in both themes, an expanded
+front-matter document, and search results. These checks cover WebKit, not the standalone Safari application.
 
 ## Download menus and generated files
 

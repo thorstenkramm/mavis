@@ -18,5 +18,5 @@ Mavis SHALL provide a labelled search field in the top bar, above the file brows
 - **THEN** the search field and main-content results remain usable without horizontal page scrolling
 
 #### Scenario: Jump to search from the keyboard
-- **WHEN** a user presses `/` outside a text field with JavaScript enabled
+- **WHEN** a user presses `Alt+/` outside a text field with JavaScript enabled and search is available
 - **THEN** focus moves to the search field
