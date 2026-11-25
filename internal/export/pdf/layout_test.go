@@ -2,11 +2,12 @@ package pdf
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"io"
 	"log"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,7 +18,10 @@ import (
 	"github.com/stephenafamo/goldmark-pdf/gopdf"
 	"github.com/thorstenkramm/mavis/internal/config"
 	pdfdoc "seehuhn.de/go/pdf"
+	"seehuhn.de/go/pdf/font"
+	"seehuhn.de/go/pdf/page"
 	"seehuhn.de/go/pdf/pagetree"
+	pdfreader "seehuhn.de/go/pdf/reader"
 )
 
 // layoutPDF records the layout calls that recordingPDF ignores and lets a
@@ -296,27 +300,79 @@ func TestMultiPageDocumentHasAFooterOnEveryPage(t *testing.T) {
 	for i, page := range textPages {
 		lines := strings.Split(strings.TrimSpace(page), "\n")
 		footer := strings.Join(strings.Fields(lines[len(lines)-1]), " ")
-		if footer != "My guide "+strconv.Itoa(i+1) || strings.Count(page, "My guide") != 1 {
+		if footer != "My guide"+strconv.Itoa(i+1) || strings.Count(page, "My guide") != 1 {
 			t.Fatalf("page %d footer: %q", i+1, footer)
 		}
 	}
 }
 
-// Use an independent reader when Poppler is installed. PDF generation itself
-// never invokes an external tool.
+// Decode every page with an independent reader on every supported platform.
 func extractPages(t *testing.T, data []byte) []string {
 	t.Helper()
-	tool, err := exec.LookPath("pdftotext")
-	if err != nil {
-		t.Skip("PDF text extraction needs Poppler")
-	}
-	cmd := exec.Command(tool, "-layout", "-", "-")
-	cmd.Stdin = bytes.NewReader(data)
-	out, err := cmd.Output()
+	r, err := pdfdoc.NewReader(bytes.NewReader(data), int64(len(data)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return strings.Split(strings.TrimSuffix(string(out), "\f"), "\f")
+	pages, err := pagetree.FindPages(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor := pdfdoc.NewCursor(r)
+	result := make([]string, 0, len(pages))
+	for _, ref := range pages {
+		dict, err := cursor.Dict(ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pg, err := cursor.Decode(dict, page.Decode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var glyphs []struct {
+			x, y float64
+			text string
+		}
+		content := pdfreader.New(pdfdoc.NewExtractor(r))
+		add := func(value string) {
+			position := content.State.GState.TextRenderingMatrix()
+			glyphs = append(glyphs, struct {
+				x, y float64
+				text string
+			}{position[4], position[5], value})
+		}
+		content.TextEvent = func(event pdfreader.TextEvent, _ float64) {
+			if event == pdfreader.TextEventSpace {
+				add(" ")
+			}
+		}
+		content.Character = func(c font.Code) error {
+			add(c.Text)
+			return nil
+		}
+		if err := content.ProcessPage(pg); err != nil {
+			t.Fatal(err)
+		}
+		// gopdf writes the footer when opening the page, before body text.
+		// Reading order must therefore use coordinates, not stream order.
+		slices.SortStableFunc(glyphs, func(a, b struct {
+			x, y float64
+			text string
+		}) int {
+			if dy := b.y - a.y; dy < -0.5 || dy > 0.5 {
+				return cmp.Compare(b.y, a.y)
+			}
+			return cmp.Compare(a.x, b.x)
+		})
+		var text strings.Builder
+		for i, glyph := range glyphs {
+			if i > 0 && glyph.y < glyphs[i-1].y-0.5 {
+				text.WriteByte('\n')
+			}
+			text.WriteString(glyph.text)
+		}
+		result = append(result, text.String())
+	}
+	return result
 }
 
 func TestVisibleBodyAfterRepeatedBreaks(t *testing.T) {
