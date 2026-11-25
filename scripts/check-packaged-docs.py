@@ -9,6 +9,8 @@ from urllib.parse import unquote, urlsplit
 def check(root):
     content = root / "docs/content"
     required = (root / "README.md", content / "getting-started/installation.md",
+                content / "guides/linux-systemd.md", content / "guides/macos-launchd.md",
+                content / "guides/windows-servy.md", content / "guides/linux-caddy.md",
                 content / "reference/configuration.md", root / "testdata/docs/README.md")
     for document in required:
         if not document.is_file():

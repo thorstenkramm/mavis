@@ -66,24 +66,24 @@ PDF export SHALL substitute a visible placeholder for unsupported image formats 
 - **WHEN** Markdown references an eligible local PNG, JPEG, or GIF image
 - **THEN** Mavis embeds that image subject to available layout support
 
+#### Scenario: Raster exceeds the PDF pixel budget
+- **WHEN** a referenced raster has more than 8,388,608 pixels
+- **THEN** Mavis uses the visible placeholder instead of decoding that image for embedding
+
 ### Requirement: Offer optional DOCX conversion
-Mavis SHALL enable DOCX at startup when pandoc is found in PATH or configured explicitly, unless `export_docx = false`. It SHALL generate DOCX from self-contained authorized HTML in a sandboxed local process without fetching remote or unauthorized resources.
+Mavis SHALL enable DOCX at startup only when pandoc is found in the process PATH and `export_docx` is enabled. It SHALL generate DOCX from self-contained authorized HTML in a sandboxed local process without fetching remote or unauthorized resources.
 
 #### Scenario: Pandoc is found in PATH
 - **WHEN** DOCX is not disabled and startup finds pandoc in PATH
 - **THEN** Mavis enables DOCX using that executable
 
 #### Scenario: Pandoc is not found
-- **WHEN** DOCX is not disabled, no executable is explicitly configured, and startup cannot find pandoc in PATH
+- **WHEN** DOCX is not disabled and startup cannot find pandoc in PATH
 - **THEN** Mavis starts without DOCX and leaves other downloads available
 
 #### Scenario: DOCX is explicitly disabled
-- **WHEN** configuration sets `export_docx = false`, regardless of pandoc availability or an explicit path
+- **WHEN** configuration sets `export_docx = false`, regardless of pandoc availability
 - **THEN** Mavis skips converter resolution, omits DOCX from the menu, and reports direct DOCX requests as unavailable
-
-#### Scenario: Explicit executable is invalid
-- **WHEN** DOCX is enabled and an explicitly configured pandoc executable cannot be resolved
-- **THEN** Mavis reports an actionable startup configuration error
 
 #### Scenario: Download DOCX
 - **WHEN** DOCX is enabled and a user downloads Markdown as DOCX

@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/thorstenkramm/mavis/internal/config"
 	"github.com/thorstenkramm/mavis/internal/content"
 	documentexport "github.com/thorstenkramm/mavis/internal/export"
 	"github.com/thorstenkramm/mavis/internal/render"
@@ -34,6 +35,7 @@ type Exporter interface {
 }
 
 type webHandler struct {
+	editTemplate  config.EditTemplate
 	resolver      *content.Resolver
 	renderer      MarkdownRenderer
 	exporter      Exporter
@@ -48,6 +50,7 @@ type webHandler struct {
 }
 
 type pageModel struct {
+	EditURL        string
 	Title          string
 	Navigation     []content.NavigationItem
 	Search         searchModel
@@ -81,15 +84,16 @@ func NewHandler(resolver *content.Resolver, logger *log.Logger) (http.Handler, e
 
 // NewHandlerWithRenderer constructs routes with an injectable Markdown renderer.
 func NewHandlerWithRenderer(resolver *content.Resolver, renderer MarkdownRenderer, logger *log.Logger) (http.Handler, error) {
-	return NewHandlerWithExporter(resolver, renderer, nil, logger)
+	return NewHandlerWithExporter(resolver, renderer, nil, logger, config.EditTemplate{})
 }
 
 // NewHandlerWithExporter constructs routes with injectable rendering and export services.
-func NewHandlerWithExporter(resolver *content.Resolver, renderer MarkdownRenderer, exporter Exporter, logger *log.Logger) (http.Handler, error) {
+func NewHandlerWithExporter(resolver *content.Resolver, renderer MarkdownRenderer, exporter Exporter, logger *log.Logger, edit config.EditTemplate) (http.Handler, error) {
 	handler, err := newHandler(resolver, renderer, exporter, logger)
 	if err != nil {
 		return nil, err
 	}
+	handler.editTemplate = edit
 	return handler.routes(), nil
 }
 
@@ -106,15 +110,17 @@ func newHandler(resolver *content.Resolver, renderer MarkdownRenderer, exporter 
 		return nil, err
 	}
 	return &webHandler{
-		resolver:      resolver,
-		renderer:      renderer,
-		exporter:      exporter,
-		files:         content.NewFileHandler(resolver, logger),
-		assets:        assets,
-		pages:         pages,
-		logger:        logger,
-		readFile:      os.ReadFile,
-		search:        resolver.Search,
+		resolver: resolver,
+		renderer: renderer,
+		exporter: exporter,
+		files:    content.NewFileHandler(resolver, logger),
+		assets:   assets,
+		pages:    pages,
+		logger:   logger,
+		readFile: os.ReadFile,
+		search: func(ctx context.Context, query string) (content.SearchResults, error) {
+			return resolver.SearchWhere(ctx, query, hasContentRoute)
+		},
 		searchTimeout: searchTimeout,
 		searches:      make(chan struct{}, concurrentSearches),
 	}, nil
@@ -180,6 +186,7 @@ func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http
 		Name:   displayName(resource.RelativePath),
 		RawURL: content.RawURLFor(resource.RelativePath, request.URL.RawQuery),
 	}
+	var editURL string
 	if kind == viewerText {
 		source, err := handler.readFile(resource.Path)
 		if err != nil {
@@ -190,6 +197,7 @@ func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http
 			return false
 		}
 		viewer.Text = string(source)
+		editURL = handler.editTemplate.URL(resource.RelativePath)
 	}
 	navigation, err := handler.resolver.Navigation(resource.RelativePath)
 	if err != nil {
@@ -198,6 +206,7 @@ func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http
 	}
 	handler.writePage(writer, http.StatusOK, pageModel{
 		Title:      viewer.Name,
+		EditURL:    editURL,
 		Navigation: navigation,
 		Download:   &downloadModel{RawURL: content.URLFor(resource.RelativePath, false) + "?download=1&raw=1"},
 		Viewer:     viewer,
@@ -284,6 +293,7 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 		Title:          title,
 		Navigation:     navigation,
 		Download:       download,
+		EditURL:        handler.editTemplate.URL(resource.RelativePath),
 		Content:        template.HTML(document.HTML),
 		TOC:            document.TOC,
 		FrontMatter:    document.FrontMatter,

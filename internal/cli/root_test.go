@@ -61,6 +61,35 @@ func TestServeRequiresExactlyOneDirectory(t *testing.T) {
 	}
 }
 
+func TestSocketGroupUsesEffectiveListener(t *testing.T) {
+	for _, tc := range []struct {
+		name, extraConfig string
+		flags             []string
+		valid             bool
+	}{
+		{"socket in file", `socket = "mavis.sock"`, nil, true}, {"CLI socket", "", []string{"--socket", "mavis.sock"}, true},
+		{"TCP", "", nil, false}, {"conflicting TCP", `port = 4455`, []string{"--socket", "mavis.sock"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, config.FileName), []byte("[server]\nsocket_group = \"proxy\"\n"+tc.extraConfig), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			called := false
+			_, _, err := executeCommand(append([]string{"serve", root}, tc.flags...), func(_ context.Context, _ string, c config.Config, _, _ io.Writer) error {
+				called = true
+				if c.Server.SocketGroup != "proxy" || c.Server.Socket != "mavis.sock" {
+					t.Fatalf("wrong listener: %+v", c.Server)
+				}
+				return nil
+			})
+			if (err == nil) != tc.valid || called != tc.valid {
+				t.Fatalf("called=%v, err=%v", called, err)
+			}
+		})
+	}
+}
+
 func TestFormerServCommandIsRejected(t *testing.T) {
 	_, _, err := executeCommand([]string{"serv", "."}, nil)
 	if err == nil || !strings.Contains(err.Error(), "serve") {

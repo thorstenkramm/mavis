@@ -67,6 +67,33 @@ func rasterImage(t *testing.T, format string) []byte {
 	return output.Bytes()
 }
 
+func TestImagePixelBudget(t *testing.T) {
+	root := t.TempDir()
+	pixel := rasterImage(t, "png") // 3 x 2
+	writeTestFile(t, filepath.Join(root, "sample.png"), pixel)
+	images, err := newResourceFS(testResolver(t, root, config.Default()), "guide.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		limit int
+		want  []byte
+	}{{6, pixel}, {5, previewUnavailablePNG}} {
+		images.maxPixels = tc.limit
+		file, err := images.Open("sample.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(file)
+		if closeErr := file.Close(); closeErr != nil {
+			t.Fatal(closeErr)
+		}
+		if err != nil || !bytes.Equal(data, tc.want) {
+			t.Fatalf("unexpected image at pixel budget %d: %v", tc.limit, err)
+		}
+	}
+}
+
 func TestConvertLocalRasterImagesAndVisiblePlaceholders(t *testing.T) {
 	root := t.TempDir()
 	images := map[string][]byte{

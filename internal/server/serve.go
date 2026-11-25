@@ -30,7 +30,7 @@ func Serve(ctx context.Context, root string, configuration config.Config, stdout
 	if err != nil {
 		return err
 	}
-	handler, err := newHTTPHandler(resolver, log.New(stderr, "", log.LstdFlags), exportDependencies)
+	handler, err := newHTTPHandler(resolver, log.New(stderr, "", log.LstdFlags), exportDependencies, configuration.EditURL)
 	if err != nil {
 		return fmt.Errorf("initialize HTTP handler: %w", err)
 	}
@@ -38,7 +38,7 @@ func Serve(ctx context.Context, root string, configuration config.Config, stdout
 	loopback := true
 	var listener net.Listener
 	if configuration.Server.Socket != "" {
-		listener, err = ListenUnix(configuration.Server.Socket)
+		listener, err = listenUnixWithGroup(configuration.Server.Socket, configuration.Server.SocketGroup)
 	} else {
 		loopback, err = IsLoopbackHost(configuration.Server.Host)
 		if err == nil {
@@ -73,7 +73,7 @@ func Serve(ctx context.Context, root string, configuration config.Config, stdout
 	return serveHTTP(ctx, listener, handler, 5*time.Second)
 }
 
-func newHTTPHandler(resolver *content.Resolver, logger *log.Logger, dependencies ExportDependencies) (http.Handler, error) {
+func newHTTPHandler(resolver *content.Resolver, logger *log.Logger, dependencies ExportDependencies, edit config.EditTemplate) (http.Handler, error) {
 	renderer := render.NewRenderer()
 	pdfConverter, err := pdfexport.New(resolver, logger)
 	if err != nil {
@@ -84,7 +84,7 @@ func newHTTPHandler(resolver *content.Resolver, logger *log.Logger, dependencies
 		docxConverter = docx.New(dependencies.PandocExecutable, resolver, renderer, logger)
 	}
 	exporter := documentexport.NewService(pdfConverter, docxConverter)
-	return web.NewHandlerWithExporter(resolver, renderer, exporter, logger)
+	return web.NewHandlerWithExporter(resolver, renderer, exporter, logger, edit)
 }
 
 func serveHTTP(ctx context.Context, listener net.Listener, handler http.Handler, shutdownTimeout time.Duration) error {

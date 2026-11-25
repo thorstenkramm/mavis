@@ -66,6 +66,14 @@ For each matching file, Mavis SHALL show its filename as the prominent link, its
 - **WHEN** a user activates a filename result link
 - **THEN** Mavis opens the file's normal Markdown or non-Markdown viewer URL
 
+#### Scenario: Reserved routes shadow matching files
+- **WHEN** a file's logical URL is handled by an internal route
+- **THEN** that path is omitted before applying the result limit
+
+#### Scenario: An alias excludes an otherwise accessible match
+- **WHEN** a matching file is excluded under one directory alias but accessible through another path
+- **THEN** Mavis returns a link through an eligible path without duplicating the file
+
 #### Scenario: Matching text contains markup
 - **WHEN** an excerpt contains HTML or script-like source
 - **THEN** Mavis displays it as literal text and highlights matches without creating executable elements

@@ -281,6 +281,44 @@ func TestSearchExcerptCapKeepsMatchAfterLongToken(t *testing.T) {
 	}
 }
 
+func TestExcerptContextBoundedForLargeWordCounts(t *testing.T) {
+	source := []rune(strings.Repeat("a ", 100000) + "needle" + strings.Repeat(" b", 100000))
+	allocs := testing.AllocsPerRun(5, func() {
+		start, end := searchExcerptBounds(source, 200000, 200006)
+		if start != 200000-16 || end != 200006+24 {
+			t.Fatalf("unexpected window [%d:%d]", start, end)
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("context allocated %v times", allocs)
+	}
+}
+
+func TestRestrictedAliasDoesNotHideCanonicalMatch(t *testing.T) {
+	root := t.TempDir()
+	makeFile(t, filepath.Join(root, "docs", "sub", "guide.md"), "needle")
+	makeFile(t, filepath.Join(root, "docs", "sub", "shared.md"), "needle")
+	if err := os.Symlink("docs", filepath.Join(root, "alias")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	cfg := config.Default()
+	cfg.Exclude = []string{"alias/sub/guide.md"}
+	assertSearchPaths(t, newResolver(t, root, cfg), "needle", []string{"alias/sub/shared.md", "docs/sub/guide.md"})
+}
+
+func TestCancelDuringDirectoryListing(t *testing.T) {
+	root := t.TempDir()
+	makeFile(t, filepath.Join(root, "guide.md"), "needle")
+	r := newResolver(t, root, config.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	r.readDir = func(path string) ([]os.DirEntry, error) { cancel(); return os.ReadDir(path) }
+	listing, err := r.list(ctx, "")
+	if !errors.Is(err, context.Canceled) || len(listing.entries) != 0 {
+		t.Fatalf("canceled listing: %+v, %v", listing, err)
+	}
+}
+
 func TestSearchUsesResolverVisibilityAndConfinement(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires additional privileges on Windows")
@@ -606,12 +644,13 @@ func TestSearchDescendantDirectoryFailureIsIsolated(t *testing.T) {
 	scanner := searchScanner{
 		resolver: resolver,
 		query:    newTestSearchQuery("needle"),
-		visited:  map[string]struct{}{".": {}},
+		visited:  make(map[string]struct{}),
+		active:   map[string]struct{}{".": {}},
 		collector: searchCollector{
 			items: make([]SearchResult, 0, maxSearchResults+1),
 		},
 	}
-	if err := scanner.walk(context.Background(), entries); err != nil {
+	if _, err := scanner.walk(context.Background(), entries); err != nil {
 		t.Fatalf("walk() error = %v", err)
 	}
 	if !scanner.incomplete {

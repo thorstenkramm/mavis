@@ -35,6 +35,7 @@ type SearchResult struct {
 	Name         string
 	RelativePath string
 	Excerpt      []SearchSegment
+	targetPath   string // Deduplicate results reached through different directory aliases.
 }
 
 // SearchResults contains path-ordered matches and bounded-scan notices.
@@ -53,6 +54,8 @@ type searchScanner struct {
 	resolver   *Resolver
 	query      searchQuery
 	visited    map[string]struct{}
+	active     map[string]struct{}
+	include    func(Resource) bool
 	collector  searchCollector
 	incomplete bool
 }
@@ -61,15 +64,16 @@ type searchCollector struct {
 	items []SearchResult
 }
 
-type searchWord struct {
-	start int
-	end   int
-}
-
 // Search scans current eligible file contents for one literal,
 // case-insensitive substring. Files and descendant directories that cannot be
 // searched are omitted and reported through SearchResults.Incomplete.
 func (resolver *Resolver) Search(ctx context.Context, query string) (SearchResults, error) {
+	return resolver.SearchWhere(ctx, query, nil)
+}
+
+// SearchWhere additionally skips entries the caller cannot present. Rejecting
+// a directory skips its subtree under that logical path only.
+func (resolver *Resolver) SearchWhere(ctx context.Context, query string, include func(Resource) bool) (SearchResults, error) {
 	results := SearchResults{Items: make([]SearchResult, 0)}
 	if err := ctx.Err(); err != nil {
 		return results, err
@@ -82,24 +86,26 @@ func (resolver *Resolver) Search(ctx context.Context, query string) (SearchResul
 	queryRunes := lowerSearchRunes([]rune(query))
 	scanner := searchScanner{
 		resolver: resolver,
+		include:  include,
 		query: searchQuery{
 			lower:  queryRunes,
 			prefix: searchPrefixTable(queryRunes),
 		},
-		visited: map[string]struct{}{".": {}},
+		visited: make(map[string]struct{}),
+		active:  map[string]struct{}{".": {}},
 		collector: searchCollector{
 			items: make([]SearchResult, 0, maxSearchResults+1),
 		},
 	}
-	entries, incomplete, err := resolver.list("")
+	listing, err := resolver.list(ctx, "")
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return results, ctxErr
 		}
 		return results, fmt.Errorf("search content root: %w", err)
 	}
-	scanner.incomplete = incomplete
-	if err := scanner.walk(ctx, entries); err != nil {
+	scanner.incomplete = listing.incomplete
+	if _, err := scanner.walk(ctx, listing.entries); err != nil {
 		return results, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -114,51 +120,71 @@ func (resolver *Resolver) Search(ctx context.Context, query string) (SearchResul
 	return results, nil
 }
 
-func (scanner *searchScanner) walk(ctx context.Context, entries []Resource) error {
+// covered is false if an omission could be recovered under another logical path.
+func (scanner *searchScanner) walk(ctx context.Context, entries []Resource) (covered bool, err error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	sort.Slice(entries, func(left, right int) bool {
 		return entries[left].RelativePath < entries[right].RelativePath
 	})
+	covered = true
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return err
+			return false, err
+		}
+		if scanner.include != nil && !scanner.include(entry) {
+			covered = false
+			continue
 		}
 		if entry.Info.IsDir() {
+			if _, cycle := scanner.active[entry.TargetPath]; cycle {
+				covered = false
+				continue
+			}
 			if _, seen := scanner.visited[entry.TargetPath]; seen {
 				continue
 			}
-			scanner.visited[entry.TargetPath] = struct{}{}
-			children, incomplete, err := scanner.resolver.list(entry.RelativePath)
+			children, err := scanner.resolver.list(ctx, entry.RelativePath)
 			if err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					return ctxErr
+					return false, ctxErr
 				}
 				scanner.incomplete = true
+				covered = false
 				continue
 			}
-			if incomplete {
+			if children.incomplete {
 				scanner.incomplete = true
 			}
-			if err := scanner.walk(ctx, children); err != nil {
-				return err
+			scanner.active[entry.TargetPath] = struct{}{}
+			subtreeCovered, err := scanner.walk(ctx, children.entries)
+			delete(scanner.active, entry.TargetPath)
+			if err != nil {
+				return false, err
+			}
+			if subtreeCovered && !children.logicalOmissions && !children.incomplete {
+				scanner.visited[entry.TargetPath] = struct{}{}
+			} else {
+				// An unvisited path may still be eligible through a different alias.
+				covered = false
 			}
 			continue
 		}
 
 		result, incomplete, err := readSearchResult(ctx, entry, scanner.query)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if incomplete {
 			scanner.incomplete = true
+			covered = false
 		}
 		if result != nil {
 			scanner.collector.add(*result)
 		}
 	}
-	return nil
+	return covered, nil
 }
 
 func readSearchResult(ctx context.Context, resource Resource, query searchQuery) (result *SearchResult, incomplete bool, returnErr error) {
@@ -212,6 +238,7 @@ func readSearchResult(ctx context.Context, resource Resource, query searchQuery)
 	return &SearchResult{
 		Name:         path.Base(resource.RelativePath),
 		RelativePath: resource.RelativePath,
+		targetPath:   resource.TargetPath,
 		Excerpt:      buildSearchExcerpt(runes, lower, first, query),
 	}, false, nil
 }
@@ -281,9 +308,8 @@ func buildSearchExcerpt(source, lower []rune, first int, query searchQuery) []Se
 			prefix = "… "
 			available = maxSearchExcerpt - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(suffix)
 		}
-		end = start + available
-		if end >= len(source) {
-			end = len(source)
+		end = min(end, start+available)
+		if end == len(source) {
 			suffix = ""
 		}
 	}
@@ -295,48 +321,32 @@ func buildSearchExcerpt(source, lower []rune, first int, query searchQuery) []Se
 }
 
 func searchExcerptBounds(source []rune, matchStart, matchEnd int) (int, int) {
-	words := searchWords(source)
-	before := 0
-	for before < len(words) && words[before].end <= matchStart {
-		before++
-	}
-	start := 0
-	if before > searchWordsBefore {
-		start = words[before-searchWordsBefore].start
-	}
-
-	end := matchEnd
-	after := before
-	for after < len(words) && words[after].start < matchEnd {
-		if words[after].end > end {
-			end = words[after].end
-		}
-		after++
-	}
-	if len(words)-after > searchWordsAfter {
-		end = words[after+searchWordsAfter-1].end
-	} else {
-		end = len(source)
-	}
-	return start, end
+	before := contextRunes(source, matchStart-1, -1, searchWordsBefore)
+	after := contextRunes(source, matchEnd, 1, searchWordsAfter)
+	return matchStart - before, matchEnd + after
 }
 
-func searchWords(source []rune) []searchWord {
-	words := make([]searchWord, 0)
-	for index := 0; index < len(source); {
-		for index < len(source) && unicode.IsSpace(source[index]) {
-			index++
+// Start inside the matched word: its remaining runes don't count as another
+// word. One rune beyond the display cap is enough to signal truncation.
+func contextRunes(source []rune, i, step, wordLimit int) int {
+	count, words, lastNonSpace := 0, 0, 0
+	inWord := true
+	for ; i >= 0 && i < len(source) && count <= maxSearchExcerpt; i += step {
+		if unicode.IsSpace(source[i]) {
+			inWord = false
+		} else {
+			if !inWord {
+				if words == wordLimit {
+					return lastNonSpace
+				}
+				words++
+			}
+			inWord = true
+			lastNonSpace = count + 1
 		}
-		if index == len(source) {
-			break
-		}
-		start := index
-		for index < len(source) && !unicode.IsSpace(source[index]) {
-			index++
-		}
-		words = append(words, searchWord{start: start, end: index})
+		count++
 	}
-	return words
+	return count
 }
 
 func highlightSearchMatches(segments *[]SearchSegment, source, lower []rune, query searchQuery) {
@@ -367,6 +377,15 @@ func appendSearchSegment(segments *[]SearchSegment, segment SearchSegment) {
 }
 
 func (collector *searchCollector) add(result SearchResult) {
+	for i, existing := range collector.items {
+		if existing.targetPath == result.targetPath {
+			if existing.RelativePath <= result.RelativePath {
+				return
+			}
+			collector.items = append(collector.items[:i], collector.items[i+1:]...)
+			break
+		}
+	}
 	if len(collector.items) == maxSearchResults+1 &&
 		result.RelativePath >= collector.items[len(collector.items)-1].RelativePath {
 		return

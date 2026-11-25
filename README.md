@@ -1,5 +1,10 @@
 # mavis
 
+[![CI](https://github.com/thorstenkramm/mavis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thorstenkramm/mavis/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/thorstenkramm/mavis)](https://github.com/thorstenkramm/mavis/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/thorstenkramm/mavis)](https://github.com/thorstenkramm/mavis/blob/main/go.mod)
+[![License](https://img.shields.io/github/license/thorstenkramm/mavis)](https://github.com/thorstenkramm/mavis/blob/main/LICENSE)
+
 **Ma**rdown **Vi**ew **S**erver (Mavis) serves a directory of Markdown and supporting files as rendered HTML with
 folder navigation and a table of contents for the current document.
 
@@ -47,5 +52,12 @@ and [security guidance](docs/content/reference/security.md).
 
 Mavis supports core [GitLab Flavored Markdown](docs/content/reference/markdown.md) and provides a responsive two-pane
 reading interface. See [platform compatibility](docs/content/reference/platforms.md) for supported operating systems,
-CPUs, and Unix sockets. Full GitLab extension parity, automatic browser reload, and full-text search of served content
-are outside the baseline.
+CPUs, and Unix sockets. See also [Searching documentation](docs/content/guides/searching-documentation.md) and
+[Downloading documents](docs/content/guides/downloading-documents.md).
+
+## Run as a service
+
+- [Linux with systemd](docs/content/guides/linux-systemd.md)
+- [macOS with launchd](docs/content/guides/macos-launchd.md)
+- [Windows with Servy](docs/content/guides/windows-servy.md)
+- [Linux HTTPS with Caddy and a Unix socket](docs/content/guides/linux-caddy.md)

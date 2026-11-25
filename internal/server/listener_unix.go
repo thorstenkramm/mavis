@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -21,10 +23,24 @@ type unixSocket struct {
 	closeErr  error
 }
 
-// ListenUnix creates a local-only Unix-socket listener.
-func ListenUnix(path string) (net.Listener, error) {
+func listenUnixWithGroup(path, group string) (net.Listener, error) {
+	return listenUnix(path, group, os.Chown, os.Chmod)
+}
+
+func listenUnix(path, group string, chown func(string, int, int) error, chmod func(string, fs.FileMode) error) (net.Listener, error) {
 	if path == "" {
 		return nil, errors.New("unix-socket path must not be empty")
+	}
+	gid := -1
+	if group != "" {
+		g, err := user.LookupGroup(group)
+		if err != nil {
+			return nil, fmt.Errorf("resolve server.socket_group %q: %w", group, err)
+		}
+		gid, err = strconv.Atoi(g.Gid)
+		if err != nil || gid < 0 {
+			return nil, fmt.Errorf("invalid GID for server.socket_group %q", group)
+		}
 	}
 	if err := removeStaleSocket(path); err != nil {
 		return nil, err
@@ -50,7 +66,15 @@ func ListenUnix(path string) (net.Listener, error) {
 		return nil, fmt.Errorf("inspect unix socket %q: %w", path, err)
 	}
 	socket := &unixSocket{Listener: listener, path: path, info: info}
-	if err := os.Chmod(path, 0o600); err != nil {
+	err = chmod(path, 0o600)
+	if err == nil && gid >= 0 {
+		if err = chown(path, -1, gid); err != nil {
+			err = fmt.Errorf("assign socket group %q: %w", group, err)
+		} else if err = chmod(path, 0o660); err != nil {
+			err = fmt.Errorf("set group socket permissions: %w", err)
+		}
+	}
+	if err != nil {
 		if closeErr := socket.Close(); closeErr != nil {
 			return nil, errors.Join(fmt.Errorf("secure unix socket %q: %w", path, err), closeErr)
 		}

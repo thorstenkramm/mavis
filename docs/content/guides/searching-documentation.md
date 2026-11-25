@@ -16,7 +16,8 @@ Each result leads with the matching filename as its normal document or viewer li
 appears below it to distinguish equal filenames in different folders. A contextual excerpt highlights matching text and
 shows surrounding source words. Results use deterministic path order rather than relevance ranking.
 
-The reserved route is `/_mavis/search?q=...`. It shadows same-named content at that exact internal URL.
+The reserved route is `/_mavis/search?q=...`. Files whose URLs are shadowed by the search, navigation, or asset routes
+do not count toward the result limit. If several paths reach the same file, search returns one accessible link.
 
 ## Literal substrings and phrases
 

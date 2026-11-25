@@ -64,3 +64,9 @@ not automatically reload the page or require a server restart.
 Hidden files are excluded by default. Wildcard exclusions apply to navigation and direct requests, and the root
 `.mavis.conf` is never served. See [Configuration](../reference/configuration.md) and
 [Security](../reference/security.md).
+
+## Edit a page in its repository
+
+To offer an **Edit page** link below Markdown and text/code pages, set `edit_url_template` at the top of `.mavis.conf`,
+for example `edit_url_template = "https://git.example.org/team/manual/-/edit/main/docs/{path}"`. Restart Mavis.
+A directory index links to its `README.md`. Following the link opens the repository editor; editing permissions are managed there.

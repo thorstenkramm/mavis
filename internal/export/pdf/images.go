@@ -27,6 +27,7 @@ import (
 
 const (
 	maxImageSize   = int64(10 * 1024 * 1024)
+	maxImagePixels = 8 * 1024 * 1024
 	blockedImageID = "mavis-pdf-image-omitted"
 )
 
@@ -38,9 +39,10 @@ var previewUnavailablePNG []byte
 // document. Files are copied into bounded memory files before the PDF backend
 // sees them, preventing subsequent seeks or file growth from bypassing the cap.
 type resourceFS struct {
-	resolver *content.Resolver
-	base     string
-	maxSize  int64
+	resolver  *content.Resolver
+	base      string
+	maxSize   int64
+	maxPixels int
 }
 
 func newResourceFS(resolver *content.Resolver, documentPath string) (*resourceFS, error) {
@@ -49,9 +51,10 @@ func newResourceFS(resolver *content.Resolver, documentPath string) (*resourceFS
 		return nil, err
 	}
 	return &resourceFS{
-		resolver: resolver,
-		base:     path.Dir(cleanDocument),
-		maxSize:  maxImageSize,
+		resolver:  resolver,
+		base:      path.Dir(cleanDocument),
+		maxSize:   maxImageSize,
+		maxPixels: maxImagePixels,
 	}, nil
 }
 
@@ -91,10 +94,10 @@ func (filesystem *resourceFS) Open(name string) (http.File, error) {
 		return nil, fs.ErrNotExist
 	}
 
-	_, format, err := image.DecodeConfig(bytes.NewReader(data))
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	switch format {
 	case "png", "jpeg", "gif":
-		if err == nil {
+		if err == nil && config.Width > 0 && config.Height > 0 && config.Width <= filesystem.maxPixels/config.Height {
 			return newMemoryImage(data, "image/"+format, filepath.Base(resource.Path)), nil
 		}
 	}

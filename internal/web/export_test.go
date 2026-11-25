@@ -114,7 +114,7 @@ func newExportWebHandler(t *testing.T, root string, exporter Exporter) http.Hand
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := NewHandlerWithExporter(resolver, render.NewRenderer(), exporter, nil)
+	handler, err := NewHandlerWithExporter(resolver, render.NewRenderer(), exporter, nil, config.EditTemplate{})
 	if err != nil {
 		t.Fatal(err)
 	}

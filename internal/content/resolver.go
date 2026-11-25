@@ -1,6 +1,7 @@
 package content
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -186,27 +187,39 @@ func (resolver *Resolver) resolveEntry(logicalPath string, fromListing bool) (*R
 
 // List returns eligible entries in one directory without walking descendants.
 func (resolver *Resolver) List(requestPath string) ([]Resource, error) {
-	resources, _, err := resolver.list(requestPath)
-	return resources, err
+	listing, err := resolver.list(context.Background(), requestPath)
+	return listing.entries, err
+}
+
+type directoryListing struct {
+	entries          []Resource
+	incomplete       bool
+	logicalOmissions bool // A different logical alias may admit these entries.
 }
 
 // list additionally reports eligible entries that failed after enumeration.
 // Policy exclusions and outside-root links remain silent omissions.
-func (resolver *Resolver) list(requestPath string) ([]Resource, bool, error) {
+func (resolver *Resolver) list(ctx context.Context, requestPath string) (directoryListing, error) {
+	var listing directoryListing
+	if err := ctx.Err(); err != nil {
+		return listing, err
+	}
 	directory, err := resolver.ResolveLogical(requestPath)
 	if err != nil {
-		return nil, false, err
+		return listing, err
 	}
 	if !directory.Info.IsDir() {
-		return nil, false, ErrNotFound
+		return listing, ErrNotFound
 	}
 	entries, err := resolver.readDir(directory.Path)
 	if err != nil {
-		return nil, false, fmt.Errorf("read directory: %w", err)
+		return listing, fmt.Errorf("read directory: %w", err)
 	}
-	resources := make([]Resource, 0, len(entries))
-	incomplete := false
+	listing.entries = make([]Resource, 0, len(entries))
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return directoryListing{}, err
+		}
 		logicalPath := entry.Name()
 		if directory.RelativePath != "" {
 			logicalPath = path.Join(directory.RelativePath, entry.Name())
@@ -217,13 +230,15 @@ func (resolver *Resolver) list(requestPath string) ([]Resource, bool, error) {
 		resource, err := resolver.resolveEntry(logicalPath, true)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) || !errors.Is(err, ErrNotFound) {
-				incomplete = true
+				listing.incomplete = true
+			} else if !resolver.visible(logicalPath) {
+				listing.logicalOmissions = true
 			}
 			continue
 		}
-		resources = append(resources, *resource)
+		listing.entries = append(listing.entries, *resource)
 	}
-	return resources, incomplete, nil
+	return listing, ctx.Err()
 }
 
 func (resolver *Resolver) visible(relativePath string) bool {

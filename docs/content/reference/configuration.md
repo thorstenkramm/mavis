@@ -19,7 +19,6 @@ Command-line flags configure one run without changing the file.
 | `[server].port` | `3344` |
 | `[server].socket` | none |
 | `[downloads].export_docx` | `true` |
-| `[downloads].pandoc` | none; discover `pandoc` in `PATH` |
 
 With no configuration or flags, `mavis serve .` listens on loopback TCP and prints `http://localhost:3344`.
 
@@ -62,14 +61,7 @@ values. Unix sockets are supported on macOS and Linux; Windows reports an action
 
 ## DOCX export example
 
-```toml
-[downloads]
-export_docx = true
-pandoc = "/opt/pandoc/bin/pandoc"
-```
-
-Omit `pandoc` to discover an executable named `pandoc` in `PATH`. Set `export_docx = false` to disable DOCX
-and skip executable discovery, even when `pandoc` is configured:
+Mavis discovers `pandoc` in its startup `PATH`. To disable DOCX and skip discovery:
 
 ```toml
 [downloads]
@@ -127,7 +119,25 @@ A boolean controlling files and folders with a path component beginning with `.`
 rules still apply when this is `true`, and `.mavis.conf` always remains private. Use `--include-hidden` or
 `--include-hidden=false` to override the file value explicitly for one run.
 
+### `edit_url_template`
+
+Optional top-level HTTPS URL for the repository editor. Place it before any TOML table. Include the branch and repository
+subdirectory in the URL and one `{path}` segment for the file relative to the served root. For example:
+
+```toml
+edit_url_template = "https://github.com/thorstenkramm/mavis/edit/main/docs/content/{path}"
+# GitLab alternative: "https://gitlab.example.org/team/manual/-/edit/main/docs/{path}"
+```
+
+Omit the key to hide edit links. A bare repository URL, credentials, or a placeholder in the host or query is invalid.
+
 ### `[server]`
+
+With `socket` (or `--socket`), set `socket_group = "mavis-proxy"` to share the socket with a named local group.
+The socket user stays the same; group sharing sets its mode to `0660`. Omit the key for owner-only `0600` access.
+The group must exist, the service must be allowed to assign it, and the proxy needs search permission on the parent directory.
+`socket_group` cannot be used with TCP.
+See the [Linux Caddy deployment](../guides/linux-caddy.md) for a complete socket configuration and hardened unit.
 
 `host` and `port` select a TCP listener; `socket` selects a Unix socket. Explicit CLI values override file values for
 the current run. Host `127.0.0.1` and port `3344` are defaults and therefore do not conflict with socket mode unless
@@ -139,24 +149,16 @@ is acceptable.
 
 ### `[downloads]`
 
-`export_docx` controls optional DOCX conversion and defaults to `true`. When it is enabled and `pandoc` is omitted,
-Mavis performs one `PATH` lookup for `pandoc` during startup. If the executable is absent, Mavis still starts and DOCX
-is unavailable. Setting `export_docx = false` always disables DOCX and skips all executable lookup, including a
-configured `pandoc` value.
+`export_docx` defaults to `true`. Mavis looks up `pandoc` once in its process `PATH` and uses the resolved path for the session.
+If no executable is found, Mavis starts without DOCX. Setting `export_docx = false` skips the lookup.
 
-Set `pandoc` to a non-empty executable name or path to override automatic discovery of the default name. A name is
-resolved through `PATH`; an absolute or relative path is checked directly. Mavis uses the resolved executable for the
-whole serving session. An explicitly configured executable that cannot be resolved is a startup error; Mavis does not
-fall back to another `pandoc` in `PATH`. Empty and whitespace-only values are configuration errors even when
-`export_docx = false`.
-
-Installing, removing, or replacing pandoc and changing `PATH` or executable permissions take effect only after Mavis
-restarts. Services often have a different `PATH` from an interactive shell: configure the service manager's `PATH` or
-use an absolute path, and ensure the Mavis service account can access and execute pandoc and any files it requires.
+To select a particular installation, change the service's `PATH` or place a symlink named `pandoc` in a trusted directory
+on that `PATH`. Restart Mavis to repeat discovery. If upgrading a configuration that sets `downloads.pandoc`, remove
+that key: Mavis rejects it as unknown.
 
 ## Validation
 
-Unknown keys, malformed TOML, invalid value types, empty hosts, invalid ports, empty socket paths, empty explicit
-pandoc values, unresolvable explicit pandoc executables, invalid exclusion patterns, and listener conflicts are startup
+Unknown keys, malformed TOML, invalid value types, empty hosts, invalid ports, empty socket paths,
+invalid exclusion patterns, and listener conflicts are startup
 errors. Mavis names the affected setting and exits without opening a listener. Environment-variable expansion, path
 interpolation, and configuration discovery outside the served root are not performed.

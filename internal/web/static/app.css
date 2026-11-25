@@ -424,6 +424,14 @@ button {
   font-weight: 700;
 }
 
+.edit-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  margin-top: 1rem;
+}
+
 .document-toolbar {
   display: flex;
   justify-content: flex-end;

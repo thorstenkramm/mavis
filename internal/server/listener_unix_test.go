@@ -9,8 +9,11 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/thorstenkramm/mavis/internal/config"
@@ -150,6 +153,71 @@ func TestServePrintsSocketStartupAndCleansUp(t *testing.T) {
 func TestListenUnixRejectsEmptyPath(t *testing.T) {
 	if _, err := ListenUnix(""); err == nil {
 		t.Fatal("ListenUnix(empty) error = nil")
+	}
+}
+
+func TestGroupSocket(t *testing.T) {
+	group, err := user.LookupGroupId(strconv.Itoa(os.Getegid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := shortSocketPath(t, "group.sock")
+	if _, err := listenUnixWithGroup(path, "mavis-nonexistent-test-group"); err == nil {
+		t.Fatal("accepted unknown group")
+	}
+	for _, fail := range []string{"ownership", "mode", "replacement"} {
+		chown := func(p string, uid, gid int) error {
+			if uid != -1 || gid != os.Getegid() {
+				t.Fatalf("unexpected owner %d:%d", uid, gid)
+			}
+			if fail == "ownership" {
+				return fs.ErrPermission
+			}
+			return nil
+		}
+		chmod := func(p string, m fs.FileMode) error {
+			if m == 0o660 {
+				if fail == "replacement" {
+					if err := os.Remove(p); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(p, []byte("replacement"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return fs.ErrPermission
+			}
+			return os.Chmod(p, m)
+		}
+		if _, err := listenUnix(path, group.Name, chown, chmod); !errors.Is(err, fs.ErrPermission) {
+			t.Fatalf("%s error: %v", fail, err)
+		}
+		if fail == "replacement" {
+			if data, err := os.ReadFile(path); err != nil || string(data) != "replacement" {
+				t.Fatal("replacement not preserved")
+			}
+			if err := os.Remove(path); err != nil {
+				t.Fatal(err)
+			}
+		} else if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("socket retained: %v", err)
+		}
+	}
+	l, err := listenUnixWithGroup(path, group.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeListener(t, l)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatalf("unexpected socket stat type %T", info.Sys())
+	}
+	if int(st.Uid) != os.Geteuid() || int(st.Gid) != os.Getegid() || info.Mode().Perm() != 0o660 {
+		t.Fatalf("unexpected socket metadata: %+v", info)
 	}
 }
 

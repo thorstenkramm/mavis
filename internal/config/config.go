@@ -24,19 +24,20 @@ const (
 
 // Server contains listener settings.
 type Server struct {
-	Host   string
-	Port   int
-	Socket string
+	SocketGroup string
+	Host        string
+	Port        int
+	Socket      string
 }
 
 // Downloads contains optional document export settings.
 type Downloads struct {
 	ExportDOCX bool
-	Pandoc     string
 }
 
 // Config contains the effective settings for one serving session.
 type Config struct {
+	EditURL       EditTemplate
 	Exclude       []string
 	IncludeHidden bool
 	Server        Server
@@ -45,7 +46,6 @@ type Config struct {
 	hostSet   bool
 	portSet   bool
 	socketSet bool
-	pandocSet bool
 }
 
 // Overrides contains explicitly supplied CLI values. Nil fields are unchanged.
@@ -58,21 +58,22 @@ type Overrides struct {
 }
 
 type fileConfig struct {
-	Exclude       []string      `toml:"exclude"`
-	IncludeHidden *bool         `toml:"include_hidden"`
-	Server        fileServer    `toml:"server"`
-	Downloads     fileDownloads `toml:"downloads"`
+	EditURLTemplate *string       `toml:"edit_url_template"`
+	Exclude         []string      `toml:"exclude"`
+	IncludeHidden   *bool         `toml:"include_hidden"`
+	Server          fileServer    `toml:"server"`
+	Downloads       fileDownloads `toml:"downloads"`
 }
 
 type fileServer struct {
-	Host   *string `toml:"host"`
-	Port   *int    `toml:"port"`
-	Socket *string `toml:"socket"`
+	SocketGroup *string `toml:"socket_group"`
+	Host        *string `toml:"host"`
+	Port        *int    `toml:"port"`
+	Socket      *string `toml:"socket"`
 }
 
 type fileDownloads struct {
-	ExportDOCX *bool   `toml:"export_docx"`
-	Pandoc     *string `toml:"pandoc"`
+	ExportDOCX *bool `toml:"export_docx"`
 }
 
 // Default returns the safe serving defaults.
@@ -105,6 +106,12 @@ func Load(root string) (Config, error) {
 	}
 
 	configuration.Exclude = append([]string(nil), file.Exclude...)
+	if file.EditURLTemplate != nil {
+		configuration.EditURL, err = parseEditTemplate(*file.EditURLTemplate)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid %s: %w", FileName, err)
+		}
+	}
 	if file.IncludeHidden != nil {
 		configuration.IncludeHidden = *file.IncludeHidden
 	}
@@ -120,15 +127,17 @@ func Load(root string) (Config, error) {
 		configuration.Server.Socket = *file.Server.Socket
 		configuration.socketSet = true
 	}
+	if file.Server.SocketGroup != nil {
+		if strings.TrimSpace(*file.Server.SocketGroup) == "" {
+			return Config{}, errors.New("server.socket_group must not be blank")
+		}
+		configuration.Server.SocketGroup = *file.Server.SocketGroup
+	}
 	if file.Downloads.ExportDOCX != nil {
 		configuration.Downloads.ExportDOCX = *file.Downloads.ExportDOCX
 	}
-	if file.Downloads.Pandoc != nil {
-		configuration.Downloads.Pandoc = *file.Downloads.Pandoc
-		configuration.pandocSet = true
-	}
 
-	if err := configuration.Validate(); err != nil {
+	if err := configuration.validateFileSettings(); err != nil {
 		return Config{}, fmt.Errorf("invalid %s: %w", FileName, err)
 	}
 	return configuration, nil
@@ -163,6 +172,13 @@ func Merge(configuration Config, overrides Overrides) (Config, error) {
 
 // Validate checks effective values and explicit listener selection.
 func (configuration Config) Validate() error {
+	if configuration.Server.SocketGroup != "" && configuration.Server.Socket == "" {
+		return errors.New("server.socket_group requires a Unix socket (server.socket or --socket)")
+	}
+	return configuration.validateFileSettings()
+}
+
+func (configuration Config) validateFileSettings() error {
 	if err := configuration.validateValues(); err != nil {
 		return err
 	}
@@ -210,9 +226,6 @@ func (configuration Config) validateValues() error {
 	}
 	if configuration.socketSet && configuration.Server.Socket == "" {
 		return errors.New("server.socket must not be empty")
-	}
-	if configuration.pandocSet && strings.TrimSpace(configuration.Downloads.Pandoc) == "" {
-		return errors.New("downloads.pandoc must not be empty")
 	}
 	return nil
 }

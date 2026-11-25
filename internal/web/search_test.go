@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -47,6 +48,20 @@ func TestSearchRouteMethodsEmptyQueryHEADAndSecurityHeaders(t *testing.T) {
 		if rejected.Code != http.StatusMethodNotAllowed || rejected.Header().Get("Allow") != "GET, HEAD" {
 			t.Errorf("%s search = %d, Allow %q", method, rejected.Code, rejected.Header().Get("Allow"))
 		}
+	}
+}
+
+func TestShadowedFilesDoNotCountTowardResultLimit(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"_mavis/search", "_mavis/navigation", "_mavis/assets/manual.txt"} {
+		writeWebFile(t, root, name, "needle")
+	}
+	for i := range 100 {
+		writeWebFile(t, root, fmt.Sprintf("page%02d.md", i), "needle")
+	}
+	body := requestWeb(newWebHandler(t, root, render.NewRenderer(), nil), "/_mavis/search?q=needle").Body.String()
+	if strings.Count(body, `class="search-result-link"`) != 100 || !strings.Contains(body, `class="search-result-link" href="/page99.md"`) || strings.Contains(body, `class="search-notice"`) {
+		t.Fatal("shadowed paths displaced eligible results or triggered a notice")
 	}
 }
 

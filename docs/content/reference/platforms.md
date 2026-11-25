@@ -28,7 +28,9 @@ embedded in the executable. Go is needed only to build from source or run the re
 ## TCP and Unix-socket listeners
 
 All platforms support TCP with the default loopback address `127.0.0.1:3344`. A Unix socket can be selected with
-`--socket` on macOS and Linux. On supported Unix systems, Mavis applies owner-only socket permissions, refuses to
+`--socket` on macOS and Linux. Mavis defaults to owner-only permissions (`0600`); `server.socket_group` opts into
+group access (`0660`). Use a group resolvable by the installed binary: standalone builds may use the local group
+database rather than network directory services. Mavis refuses to
 remove an arbitrary existing path, and cleans up only the socket owned by the current process.
 
 Windows returns this kind of actionable error instead of silently falling back to TCP:
@@ -55,3 +57,12 @@ not claim specialized GitLab extension parity. See [Markdown compatibility](mark
 matrix and intentional limitations.
 
 For archive names, download instructions, and checksums, see [Installation](../getting-started/installation.md).
+
+## Service deployment verification
+
+| Guide | Verification |
+| --- | --- |
+| [Linux systemd](../guides/linux-systemd.md) | Debian 13 arm64, systemd 257: unit validation, service user `mavis`, HTTP response and stop verified. |
+| [Linux Caddy](../guides/linux-caddy.md) | Same VM, Caddy 2.6.2: hardened unit and Caddyfile validated. HTTPS tested with a local CA, `0660` socket accessible to Caddy but not `nobody`, no Mavis TCP listener. |
+| [macOS launchd](../guides/macos-launchd.md) | Plist syntax checked on macOS 27.0.1; native system LaunchDaemon lifecycle not yet verified. |
+| [Windows Servy](../guides/windows-servy.md) | Instructions checked against Servy 11.0 documentation; native Windows service lifecycle not yet verified. |

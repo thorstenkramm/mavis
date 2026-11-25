@@ -82,8 +82,10 @@ and search failures use generic responses without filesystem or process details.
 
 The default listener is loopback-only. Non-loopback binding requires explicit configuration and displays a warning:
 anyone with network access may read the served files. Mavis does not provide authentication. Use it only on networks
-where that exposure is acceptable. Unix sockets provide local-only transport with owner-only permissions on supported
-platforms; they do not add user authentication.
+where that exposure is acceptable. Unix sockets default to owner-only permissions. Setting `server.socket_group` grants
+members of that group the same read access via the socket. Keep the parent directory non-writable by those clients;
+use `UMask=0077` for the service. Socket permissions do not add application-level authentication.
+For a worked example, see [Linux HTTPS with Caddy](../guides/linux-caddy.md).
 
 TCP requests must use the configured hostname or bound address and port. A loopback connection also accepts
 `localhost`. For wildcard bindings, clients can use the IP address they connected to. If using a reverse proxy,

@@ -34,6 +34,16 @@ type searchResultModel struct {
 	Excerpt      []content.SearchSegment
 }
 
+func hasContentRoute(resource content.Resource) bool {
+	urlPath := "/" + resource.RelativePath
+	if urlPath == strings.TrimSuffix(assetPrefix, "/") || strings.HasPrefix(urlPath, assetPrefix) {
+		return false
+	}
+	// Only the exact navigation and search URLs are reserved. Children of
+	// directories with those names still have normal content routes.
+	return resource.Info.IsDir() || (urlPath != navigationPath && urlPath != searchPath)
+}
+
 func (handler *webHandler) serveSearch(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {

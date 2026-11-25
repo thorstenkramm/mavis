@@ -39,6 +39,7 @@
         {{if .HasFrontMatter}}<details class="front-matter"><summary>Front matter</summary><pre><code class="language-yaml">{{.FrontMatter}}</code></pre></details>{{end}}
         {{if .Viewer}}<section class="file-viewer" aria-label="File viewer"><div class="viewer-toolbar"><span>{{.Viewer.Name}}</span><div class="viewer-actions"><a href="{{.Viewer.RawURL}}">View raw file</a>{{template "download-menu" .Download}}</div></div>{{if eq .Viewer.Kind "text"}}<pre class="text-viewer"><code>{{.Viewer.Text}}</code></pre>{{else if eq .Viewer.Kind "image"}}<img class="image-viewer" src="{{.Viewer.RawURL}}" alt="{{.Viewer.Name}}">{{else if eq .Viewer.Kind "pdf"}}<iframe class="pdf-viewer" src="{{.Viewer.RawURL}}" title="{{.Viewer.Name}} PDF viewer"></iframe>{{end}}</section>{{end}}
         {{if .Content}}{{.Content}}{{end}}
+        {{if .EditURL}}<footer><a class="edit-page" href="{{.EditURL}}"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="3" r="2"/><circle cx="5" cy="15" r="2"/><circle cx="13" cy="5" r="2"/><path d="M5 5v8m0-1c0-3 8-1 8-5"/></svg>Edit page</a></footer>{{end}}
         {{if .ShowListing}}{{if .Entries}}<ul class="directory-list">{{range .Entries}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>{{else}}<p>This directory is empty.</p>{{end}}{{end}}
       </article>
       {{if .TOC}}<aside class="toc" aria-label="On this page"><h2>On this page</h2>{{template "toc-items" .TOC}}</aside>{{end}}

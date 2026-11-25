@@ -53,3 +53,6 @@ func TCPURL(configuration config.Server, address net.Addr) string {
 	}
 	return "http://" + address.String()
 }
+
+// ListenUnix starts an owner-only Unix socket listener on supported platforms.
+func ListenUnix(path string) (net.Listener, error) { return listenUnixWithGroup(path, "") }

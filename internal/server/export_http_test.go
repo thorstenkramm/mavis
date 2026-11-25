@@ -30,7 +30,7 @@ func TestHTTPHandlerDOCXVisibilityFollowsStartupDependencies(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			handler, err := newHTTPHandler(resolver, log.New(io.Discard, "", 0), test.dependencies)
+			handler, err := newHTTPHandler(resolver, log.New(io.Discard, "", 0), test.dependencies, config.EditTemplate{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -53,7 +53,7 @@ func TestHTTPHandlerServesBuiltInPDF(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := newHTTPHandler(resolver, log.New(io.Discard, "", 0), ExportDependencies{})
+	handler, err := newHTTPHandler(resolver, log.New(io.Discard, "", 0), ExportDependencies{}, config.EditTemplate{})
 	if err != nil {
 		t.Fatal(err)
 	}
