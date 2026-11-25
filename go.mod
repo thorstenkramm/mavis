@@ -5,6 +5,7 @@ go 1.27.2
 toolchain go1.27.4
 
 require (
+	github.com/alecthomas/chroma/v2 v2.19.0
 	github.com/bmatcuk/doublestar/v4 v4.10.7
 	github.com/go-swiss/fonts v0.0.0-20230807175105-90067c2f5042
 	github.com/microcosm-cc/bluemonday v1.0.27
@@ -18,7 +19,6 @@ require (
 )
 
 require (
-	github.com/alecthomas/chroma/v2 v2.19.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/gorilla/css v1.0.1 // indirect

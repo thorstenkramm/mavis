@@ -35,6 +35,8 @@ type Converter struct {
 	logger     *log.Logger
 	fonts      *offlineFontCache
 	newBackend backendFactory
+	// observeOutline, when set, receives each conversion's bookmark outline.
+	observeOutline func(*documentOutline)
 }
 
 // New constructs an offline Markdown-to-PDF converter. All font variants used
@@ -89,8 +91,17 @@ func (converter *Converter) Convert(
 		return err
 	}
 	body := bytes.TrimPrefix(render.MarkdownBody(source), utf8BOM)
-	backend := converter.newBackend(ctx, gopdf.Config{Title: documentTitle(documentPath)}, converter.fonts)
+	title := documentTitle(documentPath)
+	backend := converter.newBackend(ctx, gopdf.Config{
+		Title:      title,
+		FooterFunc: pageFooter(title, converter.fonts.coverage[fontKey{family: bodyFamily}]),
+	}, converter.fonts)
+	applyPageMargins(backend)
 	normalized := newGlyphPDF(backend, converter.fonts.coverage)
+	normalized.outline = newDocumentOutline(backend)
+	if converter.observeOutline != nil {
+		defer converter.observeOutline(normalized.outline)
+	}
 
 	renderer := goldpdf.New(
 		goldpdf.WithContext(ctx),
@@ -99,13 +110,18 @@ func (converter *Converter) Convert(
 		goldpdf.WithFontsCache(converter.fonts),
 		goldpdf.WithEscapeHTML(false),
 		goldpdf.WithLogger(upstreamLogger(converter.logger)),
+		withDocumentStyles(),
 		goldpdf.WithNodeRenderers(util.Prioritized(&glyphTextRenderer{glyphs: normalized}, 500)),
 	)
 	markdown := goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
-			parser.WithASTTransformers(util.Prioritized(&imageASTTransformer{images: images}, 1000)),
+			parser.WithASTTransformers(
+				util.Prioritized(&imageASTTransformer{images: images}, 1000),
+				util.Prioritized(lineBreakTransformer{}, 1001),
+				util.Prioritized(normalized.outline, 1002),
+			),
 		),
 		goldmark.WithRenderer(renderer),
 	)
