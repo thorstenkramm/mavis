@@ -19,13 +19,20 @@ current source on every request and renders it with goldmark's core GitHub/GitLa
 | Strikethrough | `~~removed~~` renders as deleted text |
 | Automatic links | Plain HTTP and HTTPS URLs become links |
 | Heading navigation | Headings receive IDs, with numeric suffixes for duplicates, and a hierarchical current-document TOC |
+| Page titles | The first H1 supplies the browser and top-bar title; documents without an H1 use their filename or directory name |
+| YAML front matter | A leading delimited block appears in a collapsed, expandable monospaced panel and is excluded from the body and TOC |
 | Document links | Relative `.md` and `.markdown` links resolve against the source document; query strings and fragments are preserved |
-| Assets | Relative images and files resolve against the source document; root-relative paths resolve against the served root |
+| Assets | Relative images and files resolve against the source document; root-relative paths resolve against the served root; embedded images use raw-content URLs |
 | External URLs | Absolute external URLs and fragment-only links retain their destinations |
 
 Local destinations must pass the same visibility, exclusion, and root-containment rules as direct requests. Mavis
 removes destinations that are excluded or escape the served root rather than exposing a link to them. URL rewriting is
 performed on the Markdown syntax tree, so examples inside code spans and fenced code blocks are not rewritten.
+
+Front matter starts with `---` on the document's first line and ends with `---` or `...`. A UTF-8 byte order mark before
+the opening delimiter is accepted. Mavis displays the original YAML source without interpreting the metadata; an
+unterminated opening delimiter remains ordinary Markdown. Activate
+the **Front matter** panel with a pointer or keyboard to inspect the source.
 
 ## HTML safety
 

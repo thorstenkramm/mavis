@@ -117,6 +117,16 @@ func URLFor(relativePath string, directory bool) string {
 	return result
 }
 
+// RawURLFor returns a file URL that requests original bytes instead of a viewer.
+func RawURLFor(relativePath string, rawQuery string) string {
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		query = url.Values{}
+	}
+	query.Set("raw", "1")
+	return URLFor(relativePath, false) + "?" + query.Encode()
+}
+
 func resourceName(resource Resource) string {
 	if resource.RelativePath == "" {
 		return ""

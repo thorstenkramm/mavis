@@ -21,6 +21,18 @@ When a directory contains an eligible `README.md`, opening that directory displa
 Mavis displays its eligible folders and files. Navigation loads the current directory and ancestry instead of
 scanning the entire tree for every page.
 
+## File browser
+
+Distinct icons identify files and folders. Use the arrow button beside a folder to load and reveal its children without
+leaving the current document; activate it again to hide the descendants. Each folder retains its own state. The buttons
+are keyboard accessible with **Tab**, **Enter**, and **Space**, while folder names remain ordinary links to directory
+pages.
+
+Mavis stores the folders you expand locally in the browser and restores them after navigation or refresh. The current
+document's ancestry is always revealed, but folders opened only for that reason are not saved. If browser storage is
+unavailable, expansion continues to work for the open page. Without JavaScript, root entries, current ancestry, and ordinary folder links remain available; opening a folder
+link renders that directory and its ancestry on the server.
+
 ## Markdown documents
 
 Mavis recognizes `.md` and `.markdown` extensions case-insensitively. Relative links to other Markdown documents
@@ -35,8 +47,12 @@ served root. Other relative assets resolve against the document that references 
 
 ## Non-Markdown files
 
-Eligible images, PDFs, text files, and other assets are returned with an appropriate content type. The browser
-chooses whether to display a supported format inline or offer it as a download.
+Eligible UTF-8 text and code files open in an escaped, monospaced viewer. Images and PDFs open in the content area as
+well, so the file browser remains visible. Each viewer provides **View raw file** for the original bytes. Other file
+formats retain their raw responses and appropriate content types.
+
+Append `?raw=1` to a content URL when linking directly to original bytes rather than its viewer. Embedded Markdown
+images use this representation automatically. Viewer and raw URLs apply the same visibility and exclusion rules.
 
 ## Update content
 

@@ -39,10 +39,11 @@ func smokeTest(binary string) (result error) {
 		return err
 	}
 	defer os.RemoveAll(root)
-	writeFixture(root, "README.md", "# Release Smoke\n\n- [x] Packaged\n\n| Feature | Status |\n| --- | --- |\n| Rendering | Works |\n")
+	writeFixture(root, "README.md", "---\ntitle: <Release Metadata>\n---\n# Release Smoke\n\n- [x] Packaged\n\n| Feature | Status |\n| --- | --- |\n| Rendering | Works |\n")
 	writeFixture(root, "public.txt", "public content\n")
 	writeFixture(root, ".secret.md", "secret\n")
 	writeFixture(root, "drafts/private.md", "private\n")
+	writeFixture(root, "drafts/private.txt", "private text\n")
 	writeFixture(root, ".mavis.conf", "exclude = [\"drafts/**\"]\ninclude_hidden = false\n\n[server]\nhost = \"127.0.0.1\"\nport = 1\n")
 
 	port, err := availablePort()
@@ -83,18 +84,42 @@ func smokeTest(binary string) (result error) {
 	if err != nil {
 		return err
 	}
-	for _, expected := range []string{`<h1 id="release-smoke">Release Smoke</h1>`, "<table>", `aria-label="Packaged"`} {
+	for _, expected := range []string{
+		`<title>Release Smoke · Mavis</title>`, `<span class="current-page">Release Smoke</span>`,
+		`<h1 id="release-smoke">Release Smoke</h1>`, "<table>", `aria-label="Packaged"`,
+		`<details class="front-matter"><summary>Front matter</summary>`,
+		`<code class="language-yaml">title: &lt;Release Metadata&gt;`,
+	} {
 		if !strings.Contains(body, expected) {
 			return fmt.Errorf("rendered README does not contain %q", expected)
 		}
 	}
-	body, err = request(lifetime, baseURL+"/public.txt", http.StatusOK)
-	if err != nil || body != "public content\n" {
-		return fmt.Errorf("public file response = %q, %v", body, err)
+	for _, unexpected := range []string{`<details class="front-matter" open>`, `href="#title-release-metadata"`, "drafts/private"} {
+		if strings.Contains(body, unexpected) {
+			return fmt.Errorf("rendered README unexpectedly contains %q", unexpected)
+		}
 	}
-	for _, path := range []string{"/.mavis.conf", "/.secret.md", "/drafts/private.md", "/%2e%2e/outside.txt"} {
-		if _, err := request(lifetime, baseURL+path, http.StatusNotFound); err != nil {
-			return fmt.Errorf("content boundary %s: %w", path, err)
+	body, err = request(lifetime, baseURL+"/public.txt", http.StatusOK)
+	if err != nil {
+		return err
+	}
+	for _, expected := range []string{
+		`<pre class="text-viewer"><code>public content`, `href="/public.txt?raw=1">View raw file</a>`,
+		`aria-label="Documentation files"`,
+	} {
+		if !strings.Contains(body, expected) {
+			return fmt.Errorf("text viewer does not contain %q", expected)
+		}
+	}
+	body, err = request(lifetime, baseURL+"/public.txt?raw=1", http.StatusOK)
+	if err != nil || body != "public content\n" {
+		return fmt.Errorf("raw public file response = %q, %v", body, err)
+	}
+	for _, path := range []string{"/.mavis.conf", "/.secret.md", "/drafts/private.md", "/drafts/private.txt", "/%2e%2e/outside.txt"} {
+		for _, suffix := range []string{"", "?raw=1"} {
+			if _, err := request(lifetime, baseURL+path+suffix, http.StatusNotFound); err != nil {
+				return fmt.Errorf("content boundary %s%s: %w", path, suffix, err)
+			}
 		}
 	}
 	if runtime.GOOS == "windows" {

@@ -12,8 +12,11 @@ import (
 
 // Document is one rendered Markdown document and its current-document TOC.
 type Document struct {
-	HTML string
-	TOC  []TOCItem
+	HTML           string
+	TOC            []TOCItem
+	Title          string
+	FrontMatter    string
+	HasFrontMatter bool
 }
 
 // TOCItem links a heading to its generated fragment and nested subheadings.
@@ -56,30 +59,39 @@ func FallbackDocument() Document {
 }
 
 func renderDocument(source []byte, documentPath string, authorize AccessFunc) (Document, error) {
+	frontMatter, body, hasFrontMatter := splitFrontMatter(source)
 	markdown := NewMarkdown()
 	ctx := parser.NewContext()
 	// Keep document fragments distinct from controls in web/templates/page.html.
-	for _, reserved := range []string{"main-content", "navigation-toggle", "file-navigation", "navigation-close", "navigation-backdrop"} {
+	for _, reserved := range []string{"main-content", "navigation-toggle", "file-navigation", "navigation-close", "navigation-backdrop", "sidebar-resizer"} {
 		ctx.IDs().Put([]byte(reserved))
 	}
-	parsed := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(ctx))
+	parsed := markdown.Parser().Parse(text.NewReader(body), parser.WithContext(ctx))
 	if err := rewriteLinks(parsed, documentPath, authorize); err != nil {
 		return Document{}, fmt.Errorf("rewrite document links: %w", err)
 	}
-	toc, err := extractTOC(parsed, source)
+	toc, title, err := extractTOC(parsed, body)
 	if err != nil {
 		return Document{}, fmt.Errorf("extract table of contents: %w", err)
 	}
 	var output bytes.Buffer
-	if err := markdown.Renderer().Render(&output, source, parsed); err != nil {
+	if err := markdown.Renderer().Render(&output, body, parsed); err != nil {
 		return Document{}, fmt.Errorf("render Markdown: %w", err)
 	}
-	return Document{HTML: NewSanitizer().Sanitize(output.String()), TOC: toc}, nil
+	return Document{
+		HTML:           NewSanitizer().Sanitize(output.String()),
+		TOC:            toc,
+		Title:          title,
+		FrontMatter:    frontMatter,
+		HasFrontMatter: hasFrontMatter,
+	}, nil
 }
 
-func extractTOC(document ast.Node, source []byte) ([]TOCItem, error) {
+func extractTOC(document ast.Node, source []byte) ([]TOCItem, string, error) {
 	var roots []TOCItem
 	var stack []*TOCItem
+	var title string
+	var titleFound bool
 	err := ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering || node.Kind() != ast.KindHeading {
 			return ast.WalkContinue, nil
@@ -98,6 +110,10 @@ func extractTOC(document ast.Node, source []byte) ([]TOCItem, error) {
 			Fragment: "#" + id,
 			Level:    heading.Level,
 		}
+		if heading.Level == 1 && !titleFound {
+			title = item.Title
+			titleFound = true
+		}
 		for len(stack) > 0 && stack[len(stack)-1].Level >= item.Level {
 			stack = stack[:len(stack)-1]
 		}
@@ -114,9 +130,9 @@ func extractTOC(document ast.Node, source []byte) ([]TOCItem, error) {
 		return ast.WalkContinue, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return roots, nil
+	return roots, title, nil
 }
 
 func headingText(heading *ast.Heading, source []byte) string {

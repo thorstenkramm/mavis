@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/thorstenkramm/mavis/internal/content"
 	"github.com/yuin/goldmark/ast"
 )
 
@@ -14,15 +15,17 @@ func rewriteLinks(document ast.Node, documentPath string, authorize AccessFunc) 
 			return ast.WalkContinue, nil
 		}
 		var destination *[]byte
+		var embedded bool
 		switch link := node.(type) {
 		case *ast.Link:
 			destination = &link.Destination
 		case *ast.Image:
 			destination = &link.Destination
+			embedded = true
 		default:
 			return ast.WalkContinue, nil
 		}
-		rewritten, ok := rewriteDestination(string(*destination), documentPath, authorize)
+		rewritten, ok := rewriteDestination(string(*destination), documentPath, authorize, embedded)
 		if !ok {
 			*destination = nil
 			return ast.WalkContinue, nil
@@ -32,7 +35,7 @@ func rewriteLinks(document ast.Node, documentPath string, authorize AccessFunc) 
 	})
 }
 
-func rewriteDestination(destination, documentPath string, authorize AccessFunc) (string, bool) {
+func rewriteDestination(destination, documentPath string, authorize AccessFunc, embedded bool) (string, bool) {
 	parsed, err := url.Parse(destination)
 	if err != nil || parsed.IsAbs() || parsed.Host != "" || strings.HasPrefix(destination, "//") || parsed.Path == "" {
 		return destination, err == nil
@@ -64,12 +67,16 @@ func rewriteDestination(destination, documentPath string, authorize AccessFunc) 
 		return "", false
 	}
 
-	result := contentURL(target)
-	if strings.HasSuffix(parsed.Path, "/") && result != "/" {
-		result += "/"
-	}
-	if parsed.ForceQuery || parsed.RawQuery != "" {
-		result += "?" + parsed.RawQuery
+	result := content.URLFor(target, false)
+	if embedded {
+		result = content.RawURLFor(target, parsed.RawQuery)
+	} else {
+		if strings.HasSuffix(parsed.Path, "/") && result != "/" {
+			result += "/"
+		}
+		if parsed.ForceQuery || parsed.RawQuery != "" {
+			result += "?" + parsed.RawQuery
+		}
 	}
 	if parsed.Fragment != "" {
 		result += "#" + parsed.EscapedFragment()
@@ -84,15 +91,4 @@ func hasParentSegment(value string) bool {
 		}
 	}
 	return false
-}
-
-func contentURL(rootRelativePath string) string {
-	if rootRelativePath == "" {
-		return "/"
-	}
-	segments := strings.Split(rootRelativePath, "/")
-	for index := range segments {
-		segments[index] = url.PathEscape(segments[index])
-	}
-	return "/" + strings.Join(segments, "/")
 }

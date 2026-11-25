@@ -21,6 +21,7 @@ func TestFileHandlerContentTypes(t *testing.T) {
 		"image.png":              {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0},
 		"notes.txt":              []byte("plain text\n"),
 		"manual.pdf":             []byte("%PDF-1.7\nexample\n"),
+		"disguised.txt":          []byte("%PDF-1.7\nexample\n"),
 		"download.unknown-mavis": {0x00, 0x01, 0x02, 0x03, 0x04},
 		"sniffed":                {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0},
 	}
@@ -37,6 +38,7 @@ func TestFileHandlerContentTypes(t *testing.T) {
 		{name: "PNG image", path: "/image.png", contentType: "image/png"},
 		{name: "plain text", path: "/notes.txt", contentType: "text/plain; charset=utf-8"},
 		{name: "PDF", path: "/manual.pdf", contentType: "application/pdf"},
+		{name: "PDF signature overrides text extension", path: "/disguised.txt", contentType: "application/pdf"},
 		{name: "unknown binary", path: "/download.unknown-mavis", contentType: "application/octet-stream"},
 		{name: "sniffed content", path: "/sniffed", contentType: "image/png"},
 	}
@@ -51,6 +53,14 @@ func TestFileHandlerContentTypes(t *testing.T) {
 			}
 			if got := response.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 				t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+			}
+			policy := response.Header().Get("Content-Security-Policy")
+			frameOptions := response.Header().Get("X-Frame-Options")
+			if test.contentType == "application/pdf" && (!strings.Contains(policy, "frame-ancestors 'self'") || frameOptions != "SAMEORIGIN") {
+				t.Errorf("raw PDF policy = %q, X-Frame-Options = %q", policy, frameOptions)
+			}
+			if test.contentType != "application/pdf" && (!strings.Contains(policy, "frame-ancestors 'none'") || frameOptions != "") {
+				t.Errorf("raw non-PDF policy = %q, X-Frame-Options = %q", policy, frameOptions)
 			}
 			if !bytes.Equal(response.Body.Bytes(), files[strings.TrimPrefix(test.path, "/")]) {
 				t.Fatalf("body differs from source: %v", response.Body.Bytes())

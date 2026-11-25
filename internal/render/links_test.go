@@ -11,7 +11,11 @@ func TestRenderRewritesLocalLinksAndAssets(t *testing.T) {
 
 ![Diagram](images/diagram%20one.png)
 
+![Root image](/images/architecture.png?version=2#preview)
+
 [Root asset](/images/architecture.png#v2)
+
+[Text viewer](../reference/notes.txt)
 
 [Folder](../reference/)
 
@@ -23,8 +27,10 @@ func TestRenderRewritesLocalLinksAndAssets(t *testing.T) {
 	}
 	for _, want := range []string{
 		`href="/docs/reference/setup.md?mode=full#prerequisites"`,
-		`src="/docs/guide/images/diagram%20one.png"`,
+		`src="/docs/guide/images/diagram%20one.png?raw=1"`,
+		`src="/images/architecture.png?raw=1&amp;version=2#preview"`,
 		`href="/images/architecture.png#v2"`,
+		`href="/docs/reference/notes.txt"`,
 		`href="/docs/reference/"`,
 		`href="#local"`,
 	} {

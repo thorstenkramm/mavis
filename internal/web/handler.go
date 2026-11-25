@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"unicode/utf8"
 
 	"github.com/thorstenkramm/mavis/internal/content"
 	"github.com/thorstenkramm/mavis/internal/render"
@@ -28,16 +29,20 @@ type webHandler struct {
 	files    http.Handler
 	pages    *template.Template
 	logger   *log.Logger
+	readFile func(string) ([]byte, error)
 }
 
 type pageModel struct {
-	Title       string
-	Navigation  []content.NavigationItem
-	Content     template.HTML
-	TOC         []render.TOCItem
-	Entries     []entryModel
-	ShowListing bool
-	ShowTitle   bool
+	Title          string
+	Navigation     []content.NavigationItem
+	Content        template.HTML
+	TOC            []render.TOCItem
+	Entries        []entryModel
+	FrontMatter    string
+	HasFrontMatter bool
+	Viewer         *viewerModel
+	ShowListing    bool
+	ShowTitle      bool
 }
 
 type entryModel struct {
@@ -69,9 +74,11 @@ func NewHandlerWithRenderer(resolver *content.Resolver, renderer MarkdownRendere
 		files:    content.NewFileHandler(resolver, logger),
 		pages:    pages,
 		logger:   logger,
+		readFile: os.ReadFile,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("GET "+assetPrefix, http.StripPrefix(assetPrefix, http.FileServer(http.FS(assets))))
+	mux.Handle(navigationPath, http.HandlerFunc(handler.serveNavigation))
 	mux.Handle("/", handler)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setSecurityHeaders(writer.Header())
@@ -99,7 +106,51 @@ func (handler *webHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 		handler.serveMarkdown(writer, request, *resource, resource.RelativePath, displayName(resource.RelativePath))
 		return
 	}
+	if request.URL.Query().Get("raw") != "1" && handler.serveViewer(writer, request, *resource) {
+		return
+	}
 	handler.files.ServeHTTP(writer, request)
+}
+
+// serveViewer reports whether it wrote a response. Only text viewers read the
+// complete file; other formats are classified from their leading bytes.
+func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http.Request, resource content.Resource) bool {
+	sample, err := readViewerSample(resource.Path)
+	if err != nil {
+		handler.writeContentError(writer, request, resource.RelativePath, err)
+		return true
+	}
+	kind := classifyViewer(resource.Info.Name(), sample)
+	if kind == viewerNone {
+		return false
+	}
+	viewer := &viewerModel{
+		Kind:   kind,
+		Name:   displayName(resource.RelativePath),
+		RawURL: content.RawURLFor(resource.RelativePath, request.URL.RawQuery),
+	}
+	if kind == viewerText {
+		source, err := handler.readFile(resource.Path)
+		if err != nil {
+			handler.writeContentError(writer, request, resource.RelativePath, err)
+			return true
+		}
+		if !utf8.Valid(source) {
+			return false
+		}
+		viewer.Text = string(source)
+	}
+	navigation, err := handler.resolver.Navigation(resource.RelativePath)
+	if err != nil {
+		handler.writeContentError(writer, request, resource.RelativePath, err)
+		return true
+	}
+	handler.writePage(writer, http.StatusOK, pageModel{
+		Title:      viewer.Name,
+		Navigation: navigation,
+		Viewer:     viewer,
+	})
+	return true
 }
 
 func (handler *webHandler) serveDirectory(writer http.ResponseWriter, request *http.Request, resource *content.Resource) {
@@ -134,7 +185,7 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 		handler.writeContentError(writer, request, resource.RelativePath, err)
 		return
 	}
-	source, err := os.ReadFile(resource.Path)
+	source, err := handler.readFile(resource.Path)
 	if err != nil {
 		handler.writeContentError(writer, request, resource.RelativePath, err)
 		return
@@ -151,11 +202,16 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 		})
 		return
 	}
+	if document.Title != "" {
+		title = document.Title
+	}
 	handler.writePage(writer, http.StatusOK, pageModel{
-		Title:      title,
-		Navigation: navigation,
-		Content:    template.HTML(document.HTML),
-		TOC:        document.TOC,
+		Title:          title,
+		Navigation:     navigation,
+		Content:        template.HTML(document.HTML),
+		TOC:            document.TOC,
+		FrontMatter:    document.FrontMatter,
+		HasFrontMatter: document.HasFrontMatter,
 	})
 }
 
@@ -201,7 +257,7 @@ func (handler *webHandler) writePage(writer http.ResponseWriter, status int, mod
 }
 
 func setSecurityHeaders(header http.Header) {
-	header.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' http: https:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+	header.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' http: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 	header.Set("Referrer-Policy", "no-referrer")
 	header.Set("X-Content-Type-Options", "nosniff")
 	header.Set("X-Frame-Options", "DENY")

@@ -1,4 +1,4 @@
-{{define "navigation-items"}}<ul>{{range .}}<li><a href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a>{{if .Children}}{{template "navigation-items" .Children}}{{end}}</li>{{end}}</ul>{{end}}
+{{define "navigation-item"}}<li class="navigation-item" data-navigation-path="{{.RelativePath}}"><div class="navigation-row">{{if .Directory}}<button class="navigation-expander" type="button" aria-label="{{if .Children}}Collapse{{else}}Expand{{end}} {{.Name}}" aria-expanded="{{if .Children}}true{{else}}false{{end}}" data-navigation-path="{{.RelativePath}}"><span class="navigation-arrow" aria-hidden="true">{{if .Children}}▾{{else}}▸{{end}}</span></button>{{else}}<span class="navigation-expander-placeholder" aria-hidden="true"></span>{{end}}<a class="navigation-link" href="{{.URL}}"{{if .Current}} aria-current="page"{{end}}>{{if .Directory}}<svg class="navigation-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13z" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>{{else}}<svg class="navigation-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 1.5h5l4 4v9h-9zM8.5 1.5v4h4" fill="none" stroke="currentColor" stroke-linejoin="round"/></svg>{{end}}<span class="navigation-name">{{.Name}}</span></a></div>{{if .Directory}}<ul class="navigation-children"{{if not .Children}} hidden{{end}}>{{range .Children}}{{template "navigation-item" .}}{{end}}</ul>{{end}}</li>{{end}}
 {{define "toc-items"}}<ul>{{range .}}<li><a href="{{.Fragment}}">{{.Title}}</a>{{if .Children}}{{template "toc-items" .Children}}{{end}}</li>{{end}}</ul>{{end}}
 <!doctype html>
 <html lang="en">
@@ -19,13 +19,16 @@
 <div class="layout">
   <nav class="sidebar" id="file-navigation" aria-label="Documentation files">
     <div class="sidebar-heading"><span>Documentation</span><button class="nav-close" id="navigation-close" type="button" aria-label="Close file navigation">Close</button></div>
-    {{template "navigation-items" .Navigation}}
+    <ul class="navigation-root">{{range .Navigation}}{{template "navigation-item" .}}{{end}}</ul>
   </nav>
+  <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-label="Resize file navigation" aria-orientation="vertical" aria-valuemin="240" aria-valuemax="480" aria-valuenow="304" tabindex="0"></div>
   <button class="nav-backdrop" id="navigation-backdrop" type="button" aria-label="Close file navigation" tabindex="-1"></button>
   <main class="content" id="main-content" tabindex="-1">
     <div class="reading-layout">
       <article class="document">
         {{if .ShowTitle}}<h1>{{.Title}}</h1>{{end}}
+        {{if .HasFrontMatter}}<details class="front-matter"><summary>Front matter</summary><pre><code class="language-yaml">{{.FrontMatter}}</code></pre></details>{{end}}
+        {{if .Viewer}}<section class="file-viewer" aria-label="File viewer"><div class="viewer-toolbar"><span>{{.Viewer.Name}}</span><a href="{{.Viewer.RawURL}}">View raw file</a></div>{{if eq .Viewer.Kind "text"}}<pre class="text-viewer"><code>{{.Viewer.Text}}</code></pre>{{else if eq .Viewer.Kind "image"}}<img class="image-viewer" src="{{.Viewer.RawURL}}" alt="{{.Viewer.Name}}">{{else if eq .Viewer.Kind "pdf"}}<iframe class="pdf-viewer" src="{{.Viewer.RawURL}}" title="{{.Viewer.Name}} PDF viewer"></iframe>{{end}}</section>{{end}}
         {{if .Content}}{{.Content}}{{end}}
         {{if .ShowListing}}{{if .Entries}}<ul class="directory-list">{{range .Entries}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>{{else}}<p>This directory is empty.</p>{{end}}{{end}}
       </article>

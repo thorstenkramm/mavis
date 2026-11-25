@@ -45,6 +45,16 @@ func TestRenderHeadingIDsAndHierarchicalTOC(t *testing.T) {
 	assertTOCItem(t, second.Children[0], "Skipped Level", "skipped-level", 4)
 }
 
+func TestRenderUsesFirstH1AsTitle(t *testing.T) {
+	document, err := Render([]byte("## Introduction\n\n# First *title* with `code`\n\n# Second title\n"), "guide.md", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Title != "First title with code" {
+		t.Fatalf("Title = %q", document.Title)
+	}
+}
+
 func TestRenderWithoutHeadings(t *testing.T) {
 	document, err := Render([]byte("A paragraph without headings.\n"), "", nil)
 	if err != nil {
@@ -52,6 +62,9 @@ func TestRenderWithoutHeadings(t *testing.T) {
 	}
 	if len(document.TOC) != 0 {
 		t.Fatalf("TOC = %+v, want empty", document.TOC)
+	}
+	if document.Title != "" {
+		t.Fatalf("Title = %q, want empty", document.Title)
 	}
 	if document.HTML != "<p>A paragraph without headings.</p>\n" {
 		t.Fatalf("HTML = %q", document.HTML)

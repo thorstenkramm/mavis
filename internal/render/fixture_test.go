@@ -19,7 +19,7 @@ func TestRepresentativeDocumentationFixtures(t *testing.T) {
 		"<table>", `type="checkbox"`, "<del>removed text</del>",
 		`href="https://example.com"`, `<code class="language-go">`,
 		`href="/guide/reference.md#fragments"`, `href="/README.md"`,
-		`src="/images/architecture.svg"`,
+		`src="/images/architecture.svg?raw=1"`,
 	} {
 		if !strings.Contains(document.HTML, want) {
 			t.Errorf("fixture output does not contain %q:\n%s", want, document.HTML)

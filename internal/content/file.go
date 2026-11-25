@@ -1,6 +1,7 @@
 package content
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"io/fs"
@@ -69,8 +70,31 @@ func (handler *fileHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		http.NotFound(writer, request)
 		return
 	}
+	pdf, err := hasPDFSignature(file)
+	if err != nil {
+		handler.writeError(writer, resource.RelativePath, err)
+		return
+	}
+	if pdf {
+		writer.Header().Set("Content-Type", "application/pdf")
+		writer.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
+		// Agree with frame-ancestors for clients that only honor the older header.
+		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	}
 
 	http.ServeContent(writer, request, path.Base(resource.RelativePath), info.ModTime(), file)
+}
+
+func hasPDFSignature(file openedFile) (bool, error) {
+	prefix := make([]byte, 5)
+	read, err := io.ReadFull(file, prefix)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return false, err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return false, err
+	}
+	return bytes.Equal(prefix[:read], []byte("%PDF-")), nil
 }
 
 func (handler *fileHandler) writeError(writer http.ResponseWriter, relativePath string, err error) {

@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"html/template"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -19,8 +20,10 @@ func TestPageTemplateSemanticStates(t *testing.T) {
 		Title:     "<Documentation>",
 		ShowTitle: true,
 		Navigation: []content.NavigationItem{{
-			Name: "guide", URL: "/guide/", Directory: true,
-			Children: []content.NavigationItem{{Name: "setup.md", URL: "/guide/setup.md", Current: true}},
+			Name: "guide", RelativePath: "guide", URL: "/guide/", Directory: true,
+			Children: []content.NavigationItem{{Name: "setup.md", RelativePath: "guide/setup.md", URL: "/guide/setup.md", Current: true}},
+		}, {
+			Name: "reference", RelativePath: "reference", URL: "/reference/", Directory: true,
 		}},
 		TOC: []render.TOCItem{{
 			Title: "Setup", Fragment: "#setup", Level: 1,
@@ -39,6 +42,11 @@ func TestPageTemplateSemanticStates(t *testing.T) {
 		`<main class="content" id="main-content" tabindex="-1">`, `<article class="document">`,
 		`<aside class="toc" aria-label="On this page">`,
 		`href="/guide/setup.md" aria-current="page"`,
+		`aria-label="Collapse guide" aria-expanded="true" data-navigation-path="guide"`,
+		`aria-label="Expand reference" aria-expanded="false" data-navigation-path="reference"`,
+		`href="/guide/"`, `href="/reference/"`,
+		`class="navigation-icon"`, `aria-hidden="true" focusable="false"`,
+		`<ul class="navigation-children" hidden></ul>`,
 		`href="#setup"`, `href="#install"`, `class="directory-list"`,
 		`&lt;Documentation&gt;`,
 	} {
@@ -65,9 +73,40 @@ func TestNestedDocumentAndREADMENavigationStates(t *testing.T) {
 	if strings.Contains(document.Body.String(), `href="/unrelated/other.md" aria-current="page"`) {
 		t.Fatalf("unrelated document marked current: %s", document.Body.String())
 	}
+	for _, want := range []string{
+		`aria-label="Collapse docs" aria-expanded="true"`,
+		`aria-label="Collapse guide" aria-expanded="true"`,
+		`aria-label="Expand unrelated" aria-expanded="false"`,
+		`href="/docs/guide/"`, `href="/unrelated/"`,
+	} {
+		if !strings.Contains(document.Body.String(), want) {
+			t.Errorf("server-rendered navigation does not contain %q: %s", want, document.Body.String())
+		}
+	}
 	readme := requestWeb(handler, "/docs/")
 	if !strings.Contains(readme.Body.String(), `href="/docs/" aria-current="page"`) || !strings.Contains(readme.Body.String(), `<h1 id="documentation">Documentation</h1>`) {
 		t.Fatalf("README index state missing: %s", readme.Body.String())
+	}
+}
+
+func TestHeadingIDsNeverCollideWithTemplateControls(t *testing.T) {
+	matches := regexp.MustCompile(` id="([a-z-]+)"`).FindAllStringSubmatch(readEmbeddedText(t, "templates/page.html"), -1)
+	if len(matches) < 6 {
+		t.Fatalf("template control IDs = %v", matches)
+	}
+	var source strings.Builder
+	source.WriteString("# Title\n")
+	for _, match := range matches {
+		source.WriteString("\n## " + strings.ReplaceAll(match[1], "-", " ") + "\n")
+	}
+	root := t.TempDir()
+	writeWebFile(t, root, "guide.md", source.String())
+	body := requestWeb(newWebHandler(t, root, render.NewRenderer(), nil), "/guide.md").Body.String()
+	for _, match := range matches {
+		id := match[1]
+		if strings.Count(body, `id="`+id+`"`) != 1 || !strings.Contains(body, `id="`+id+`-1"`) || !strings.Contains(body, `href="#`+id+`-1"`) {
+			t.Errorf("heading ID collides with template control %q", id)
+		}
 	}
 }
 

@@ -56,8 +56,15 @@ read or open failures receive a generic server error; detailed diagnostics remai
 one file does not prevent unrelated eligible content from being served.
 
 Non-Markdown files use extension-based MIME detection with content sniffing and a binary fallback. Responses include
-`X-Content-Type-Options: nosniff`. Inline display versus download remains the browser's decision. Raw files have a
-sandboxed content security policy with scripts disabled, including HTML and SVG opened directly.
+`X-Content-Type-Options: nosniff`. Viewer-supported files have an HTML viewer at their normal URL and original bytes at
+`?raw=1`; other formats retain raw responses. Text and code viewers escape source as literal text rather than creating
+active markup. Mavis selects a viewer from a file's first 512 bytes and reads the complete file only to display valid
+UTF-8 text, so images, PDFs, and downloads are streamed rather than held in memory.
+
+Raw files have a sandboxed content security policy with scripts disabled, including HTML, SVG, and JavaScript opened
+directly. Raw PDFs alone permit framing by the same Mavis origin so the built-in viewer can display them, using
+`frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`. Other raw content retains `frame-ancestors 'none'` and
+`X-Frame-Options: DENY`. Viewer and raw representations use the same content-authorization checks.
 
 ## Network exposure
 

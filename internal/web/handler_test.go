@@ -27,6 +27,7 @@ func TestRootREADMEUsesDynamicSecureHTML(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<article class="document">`, `<h1 id="welcome">Welcome</h1>`, `<strong>documentation</strong>`,
+		`<title>Welcome · Mavis</title>`, `<span class="current-page">Welcome</span>`,
 		`aria-label="Documentation files"`, `aria-label="On this page"`, `href="#section"`,
 		`href="/_mavis/assets/app.css"`,
 	} {
@@ -45,6 +46,47 @@ func TestRootREADMEUsesDynamicSecureHTML(t *testing.T) {
 		if !strings.Contains(csp, want) {
 			t.Errorf("CSP %q does not contain %q", csp, want)
 		}
+	}
+}
+
+func TestMarkdownTitlesUseFirstH1WithFilenameFallback(t *testing.T) {
+	root := t.TempDir()
+	writeWebFile(t, root, "guide.md", "# Actual *Title*\n\n# Another title\n")
+	writeWebFile(t, root, "plain.md", "A paragraph without an H1.\n")
+	handler := newWebHandler(t, root, render.NewRenderer(), nil)
+
+	page := requestWeb(handler, "/guide.md").Body.String()
+	for _, want := range []string{`<title>Actual Title · Mavis</title>`, `<span class="current-page">Actual Title</span>`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page does not contain %q: %s", want, page)
+		}
+	}
+	if fallback := requestWeb(handler, "/plain.md").Body.String(); !strings.Contains(fallback, `<title>plain.md · Mavis</title>`) {
+		t.Fatalf("filename title fallback missing: %s", fallback)
+	}
+}
+
+func TestFrontMatterUsesCollapsedEscapedPanel(t *testing.T) {
+	root := t.TempDir()
+	writeWebFile(t, root, "metadata.md", "---\ntitle: <script>alert(1)</script>\n---\n# Visible heading\n")
+	writeWebFile(t, root, "plain.md", "# Plain\n")
+	handler := newWebHandler(t, root, render.NewRenderer(), nil)
+
+	page := requestWeb(handler, "/metadata.md").Body.String()
+	for _, want := range []string{
+		`<details class="front-matter"><summary>Front matter</summary>`,
+		`<code class="language-yaml">title: &lt;script&gt;alert(1)&lt;/script&gt;`,
+		`<h1 id="visible-heading">Visible heading</h1>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("front-matter page does not contain %q: %s", want, page)
+		}
+	}
+	if strings.Contains(page, `<details class="front-matter" open>`) || strings.Contains(page, `<h1 id="title-script">`) {
+		t.Fatalf("front matter was expanded or entered TOC: %s", page)
+	}
+	if plain := requestWeb(handler, "/plain.md").Body.String(); strings.Contains(plain, `class="front-matter"`) {
+		t.Fatalf("document without front matter has panel: %s", plain)
 	}
 }
 
@@ -104,7 +146,7 @@ func TestNonMarkdownFileUsesResolvedFileHandler(t *testing.T) {
 	root := t.TempDir()
 	writeWebFile(t, root, "image.png", string([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}))
 	handler := newWebHandler(t, root, render.NewRenderer(), nil)
-	response := requestWeb(handler, "/image.png")
+	response := requestWeb(handler, "/image.png?raw=1")
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("file response = %d, headers = %+v", response.Code, response.Header())
 	}
@@ -113,9 +155,10 @@ func TestNonMarkdownFileUsesResolvedFileHandler(t *testing.T) {
 	}
 	for _, raw := range []string{"example.html", "drawing.svg", "example.js"} {
 		writeWebFile(t, root, raw, "fixture")
-		res := requestWeb(handler, "/"+raw)
+		res := requestWeb(handler, "/"+raw+"?raw=1")
 		policy := res.Header().Get("Content-Security-Policy")
-		if res.Code != 200 || !strings.Contains(policy, "sandbox;") || !strings.Contains(policy, "script-src 'none'") {
+		if res.Code != 200 || !strings.Contains(policy, "sandbox;") || !strings.Contains(policy, "script-src 'none'") ||
+			!strings.Contains(policy, "frame-ancestors 'none'") {
 			t.Errorf("raw %s: status %d policy %q", raw, res.Code, policy)
 		}
 	}

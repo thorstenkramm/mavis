@@ -28,7 +28,7 @@ func TestRenderSanitizerPreservesSafeGFMMarkup(t *testing.T) {
 		`<h1 id="safe-heading">Safe Heading</h1>`,
 		"<table>", "<th>Feature</th>", "<td>Tables</td>",
 		`type="checkbox"`, `disabled=""`, `checked=""`,
-		`src="/docs/images/diagram.png"`, `alt="Diagram"`, `title="Architecture"`,
+		`src="/docs/images/diagram.png?raw=1"`, `alt="Diagram"`, `title="Architecture"`,
 		`href="/guide.md"`,
 		`<code class="language-go">`,
 	} {

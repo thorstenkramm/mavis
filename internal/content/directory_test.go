@@ -134,6 +134,17 @@ func TestURLFor(t *testing.T) {
 	}
 }
 
+func TestRawURLFor(t *testing.T) {
+	got := RawURLFor("space dir/image #1.png", "version=2&raw=0")
+	want := "/space%20dir/image%20%231.png?raw=1&version=2"
+	if got != want {
+		t.Fatalf("RawURLFor() = %q, want %q", got, want)
+	}
+	if got := RawURLFor("image.png", "invalid;query"); got != "/image.png?raw=1" {
+		t.Fatalf("RawURLFor() with malformed query = %q", got)
+	}
+}
+
 func findNavigation(t *testing.T, items []NavigationItem, path string) NavigationItem {
 	t.Helper()
 	for _, item := range items {
