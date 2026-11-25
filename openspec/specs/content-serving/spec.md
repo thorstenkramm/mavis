@@ -14,7 +14,7 @@ Mavis SHALL make the served root's eligible folders and files discoverable and a
 - **THEN** users can browse that hierarchy and request its eligible content
 
 ### Requirement: Serve non-Markdown files with appropriate content types
-Mavis SHALL serve original non-Markdown bytes with their appropriate `Content-Type` through an explicit raw representation. Normal navigation to eligible UTF-8 text or code, images, and PDFs SHALL return an HTML viewer; other files SHALL retain raw responses.
+Mavis SHALL serve original non-Markdown bytes with their appropriate `Content-Type` through explicit raw and download representations. Normal navigation to eligible UTF-8 text or code, images, and PDFs SHALL return an HTML viewer; other files SHALL retain raw responses.
 
 #### Scenario: Request an image
 - **WHEN** a user requests the raw representation of an eligible PNG image
@@ -23,6 +23,10 @@ Mavis SHALL serve original non-Markdown bytes with their appropriate `Content-Ty
 #### Scenario: Request another file type
 - **WHEN** a user requests the raw representation of an eligible PDF, text file, or downloadable asset
 - **THEN** Mavis returns the original bytes with an appropriate content type and leaves inline-versus-download behavior to the browser
+
+#### Scenario: Request a download
+- **WHEN** a user requests the explicit download representation of an eligible non-Markdown file
+- **THEN** Mavis returns the original bytes with an appropriate content type and a safe `Content-Disposition: attachment` filename
 
 #### Scenario: Open a viewer-supported file
 - **WHEN** a user navigates normally to an eligible UTF-8 text or code file, image, or PDF

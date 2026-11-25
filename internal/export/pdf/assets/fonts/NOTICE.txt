@@ -1,0 +1,22 @@
+Embedded font notices
+=====================
+
+The eight TrueType font files in this directory are unmodified copies of the
+font binaries referenced by github.com/go-swiss/fonts at commit 90067c2f5042.
+They are bundled so PDF conversion never downloads fonts at runtime.
+
+Roboto regular, italic, bold, and bold italic
+---------------------------------------------
+Copyright 2011 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0; see Roboto-LICENSE.txt.
+The font metadata identifies version 2.137 (2017).
+Source: https://fonts.gstatic.com/s/roboto/v30/ (the exact filenames are
+recorded in internal/export/pdf/fonts.go as cache keys).
+
+Roboto Mono regular, italic, bold, and bold italic
+--------------------------------------------------
+Copyright 2015 The Roboto Mono Project Authors
+(https://github.com/googlefonts/robotomono).
+Licensed under the Apache License, Version 2.0; see RobotoMono-LICENSE.txt.
+Source: https://fonts.gstatic.com/s/robotomono/v22/ (the exact filenames are
+recorded in internal/export/pdf/fonts.go as cache keys).

@@ -4,6 +4,7 @@
   const closeButton = document.getElementById("navigation-close");
   const backdrop = document.getElementById("navigation-backdrop");
   const main = document.getElementById("main-content");
+  const searchRegion = document.getElementById("search-region");
   const mobile = window.matchMedia("(max-width: 48rem)");
   const preferenceMemory = new Map();
 
@@ -46,6 +47,9 @@
     const hidden = mobile.matches && !open;
     sidebar.toggleAttribute("inert", hidden);
     main.inert = mobile.matches && open;
+    if (searchRegion) {
+      searchRegion.inert = mobile.matches && open;
+    }
     toggle.setAttribute("aria-expanded", String(open));
     document.body.classList.toggle("nav-open", mobile.matches && open);
   };
@@ -100,15 +104,14 @@
       closeButton.focus();
       return;
     }
-    const first = elements[0];
-    const last = elements[elements.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    const current = elements.indexOf(document.activeElement);
+    const direction = event.shiftKey ? -1 : 1;
+    const next = current < 0
+      ? (event.shiftKey ? elements.length - 1 : 0)
+      : (current + direction + elements.length) % elements.length;
+    // Explicit movement also works where WebKit's native Tab order skips links.
+    event.preventDefault();
+    elements[next].focus();
   });
 
   const syncMode = () => {

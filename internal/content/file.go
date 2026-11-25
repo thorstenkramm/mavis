@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 )
 
 type openedFile interface {
@@ -70,6 +71,10 @@ func (handler *fileHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		http.NotFound(writer, request)
 		return
 	}
+	if request.URL.Query().Get("download") == "1" {
+		writer.Header().Set("Content-Disposition", AttachmentDisposition(path.Base(resource.RelativePath)))
+		writer.Header().Set("Cache-Control", "no-store")
+	}
 	pdf, err := hasPDFSignature(file)
 	if err != nil {
 		handler.writeError(writer, resource.RelativePath, err)
@@ -80,6 +85,10 @@ func (handler *fileHandler) ServeHTTP(writer http.ResponseWriter, request *http.
 		writer.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'")
 		// Agree with frame-ancestors for clients that only honor the older header.
 		writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	}
+	extension := strings.ToLower(path.Ext(resource.RelativePath))
+	if request.URL.Query().Get("download") == "1" && (extension == ".md" || extension == ".markdown") {
+		writer.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	}
 
 	http.ServeContent(writer, request, path.Base(resource.RelativePath), info.ModTime(), file)

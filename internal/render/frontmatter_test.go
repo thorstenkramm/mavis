@@ -36,6 +36,17 @@ func TestRenderSeparatesLeadingFrontMatter(t *testing.T) {
 	}
 }
 
+func TestMarkdownBodyMatchesRendererFrontMatterRules(t *testing.T) {
+	source := []byte("\xef\xbb\xbf---\r\ntitle: Metadata\r\n---\r\n# Visible\r\n")
+	if body := string(MarkdownBody(source)); body != "# Visible\r\n" {
+		t.Fatalf("MarkdownBody() = %q", body)
+	}
+	ordinary := []byte("\xef\xbb\xbf# Visible\n")
+	if body := MarkdownBody(ordinary); string(body) != string(ordinary) {
+		t.Fatalf("ordinary Markdown body = %q, want original bytes", body)
+	}
+}
+
 func TestRenderDoesNotInventFrontMatter(t *testing.T) {
 	for _, source := range []string{
 		"# Visible\n\n---\ntitle: Ordinary Markdown\n",

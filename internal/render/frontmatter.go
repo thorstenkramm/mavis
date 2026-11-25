@@ -4,6 +4,12 @@ import "bytes"
 
 var utf8ByteOrderMark = []byte{0xEF, 0xBB, 0xBF}
 
+// MarkdownBody returns source without a leading front-matter block for generated exports.
+func MarkdownBody(source []byte) []byte {
+	_, body, _ := splitFrontMatter(source)
+	return body
+}
+
 // splitFrontMatter separates a leading YAML block without interpreting it.
 // A UTF-8 byte order mark may precede the opening delimiter.
 func splitFrontMatter(source []byte) (frontMatter string, body []byte, present bool) {

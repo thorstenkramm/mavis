@@ -29,15 +29,23 @@ type Server struct {
 	Socket string
 }
 
+// Downloads contains optional document export settings.
+type Downloads struct {
+	ExportDOCX bool
+	Pandoc     string
+}
+
 // Config contains the effective settings for one serving session.
 type Config struct {
 	Exclude       []string
 	IncludeHidden bool
 	Server        Server
+	Downloads     Downloads
 
 	hostSet   bool
 	portSet   bool
 	socketSet bool
+	pandocSet bool
 }
 
 // Overrides contains explicitly supplied CLI values. Nil fields are unchanged.
@@ -50,9 +58,10 @@ type Overrides struct {
 }
 
 type fileConfig struct {
-	Exclude       []string   `toml:"exclude"`
-	IncludeHidden *bool      `toml:"include_hidden"`
-	Server        fileServer `toml:"server"`
+	Exclude       []string      `toml:"exclude"`
+	IncludeHidden *bool         `toml:"include_hidden"`
+	Server        fileServer    `toml:"server"`
+	Downloads     fileDownloads `toml:"downloads"`
 }
 
 type fileServer struct {
@@ -61,12 +70,20 @@ type fileServer struct {
 	Socket *string `toml:"socket"`
 }
 
+type fileDownloads struct {
+	ExportDOCX *bool   `toml:"export_docx"`
+	Pandoc     *string `toml:"pandoc"`
+}
+
 // Default returns the safe serving defaults.
 func Default() Config {
 	return Config{
 		Server: Server{
 			Host: DefaultHost,
 			Port: DefaultPort,
+		},
+		Downloads: Downloads{
+			ExportDOCX: true,
 		},
 	}
 }
@@ -102,6 +119,13 @@ func Load(root string) (Config, error) {
 	if file.Server.Socket != nil {
 		configuration.Server.Socket = *file.Server.Socket
 		configuration.socketSet = true
+	}
+	if file.Downloads.ExportDOCX != nil {
+		configuration.Downloads.ExportDOCX = *file.Downloads.ExportDOCX
+	}
+	if file.Downloads.Pandoc != nil {
+		configuration.Downloads.Pandoc = *file.Downloads.Pandoc
+		configuration.pandocSet = true
 	}
 
 	if err := configuration.Validate(); err != nil {
@@ -186,6 +210,9 @@ func (configuration Config) validateValues() error {
 	}
 	if configuration.socketSet && configuration.Server.Socket == "" {
 		return errors.New("server.socket must not be empty")
+	}
+	if configuration.pandocSet && strings.TrimSpace(configuration.Downloads.Pandoc) == "" {
+		return errors.New("downloads.pandoc must not be empty")
 	}
 	return nil
 }

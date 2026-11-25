@@ -86,6 +86,45 @@ reduced motion. Desktop checks used 1440×1000 and 780×900; mobile checks used 
 Safari engine coverage uses Playwright WebKit, not a separate WebDriver run of the Safari application. No native
 Safari-driver result is claimed. WebKit's pointer-focus behavior was included in the Escape/focus-restoration checks.
 
+## Full-text search
+
+Search verification on **November 25, 2026** used Playwright 1.65.1 at 1440×1000 and 390×844. Every engine completed
+keyboard-only searches with JavaScript enabled and disabled, retained the query, displayed path-ordered filename links,
+root-relative paths, escaped contextual excerpts, and highlighted matches outside the file browser. The search region
+spanned the viewport above the header, controls met the 44-pixel target minimum, and neither home nor results pages had
+horizontal overflow.
+
+Mobile drawer checks confirmed that the search region and main content become inert, programmatic focus cannot enter the
+search field, Tab and Shift+Tab remain within the drawer, Escape closes it, and focus returns to the Files button. Axe-core
+4.11.x WCAG A/AA scans of search results and mobile navigation reported **zero violations in every engine and viewport**.
+
+| Browser/engine | Tested version | Search result |
+| --- | --- | --- |
+| Chrome | 158.0.8127.38 | Passed, 4/4 check groups |
+| Microsoft Edge | 158.0.4370.33 | Passed, 4/4 check groups |
+| Firefox | 159.0 | Passed, 4/4 check groups |
+| Safari engine | WebKit 27.2 | Passed, 4/4 check groups |
+
+## Download menus and generated files
+
+Download verification on **November 25, 2026** used Playwright 1.65.1 at 1440×1000 and 390×844. Each engine opened the
+native menu by keyboard, displayed only applicable formats, downloaded Markdown, PDF, DOCX, and a raw attachment, and
+completed desktop/mobile checks without horizontal page overflow. Axe-core 4.11.x WCAG A/AA scans of the open download
+menu reported **zero violations in every engine and viewport**.
+
+| Browser/engine | Tested version | Download result |
+| --- | --- | --- |
+| Chrome | 158.0.8127.38 | Passed, 3/3 check groups |
+| Microsoft Edge | 158.0.4370.33 | Passed, 3/3 check groups |
+| Firefox | 159.0 | Passed, 3/3 check groups |
+| Safari engine | WebKit 27.2 | Passed, 3/3 check groups |
+
+A representative German document was also opened with Poppler `pdfinfo`/`pdftotext`, macOS Quick Look, pandoc DOCX
+reading, and macOS text conversion. The one-page A4 PDF retained German text, a table, lists, links, code, and a real PNG;
+its SVG became a visible **Preview unavailable** image and emoji/CJK became replacement glyphs. The DOCX retained the
+German text, table, lists, links, code, and embedded PNG/SVG resources. PDF layout remains simplified, not
+browser-identical; DOCX text and rendering can vary by viewer.
+
 ### Inline PDF display
 
 The matrix above checks the PDF viewer's frame, raw URL, and response headers. Whether a PDF is drawn inside that frame

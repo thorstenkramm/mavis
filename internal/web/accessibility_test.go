@@ -28,6 +28,8 @@ func TestWCAGAAColorContrast(t *testing.T) {
 		{name: "links on page", foreground: "accent", background: "background", minimum: 4.5},
 		{name: "links on sidebar", foreground: "accent", background: "sidebar", minimum: 4.5},
 		{name: "current page", foreground: "accent-dark", background: "accent-soft", minimum: 4.5},
+		{name: "search highlight", foreground: "accent-dark", background: "accent-soft", minimum: 4.5},
+		{name: "search button", foreground: "background", background: "accent-dark", minimum: 4.5},
 		{name: "skip link", foreground: "background", background: "text", minimum: 4.5},
 		{name: "focus on page", foreground: "#005fcc", background: "background", minimum: 3},
 		{name: "focus on sidebar", foreground: "#005fcc", background: "sidebar", minimum: 3},

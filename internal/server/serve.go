@@ -13,16 +13,24 @@ import (
 
 	"github.com/thorstenkramm/mavis/internal/config"
 	"github.com/thorstenkramm/mavis/internal/content"
+	documentexport "github.com/thorstenkramm/mavis/internal/export"
+	"github.com/thorstenkramm/mavis/internal/export/docx"
+	pdfexport "github.com/thorstenkramm/mavis/internal/export/pdf"
+	"github.com/thorstenkramm/mavis/internal/render"
 	"github.com/thorstenkramm/mavis/internal/web"
 )
 
 // Serve starts a serving session and blocks until it stops.
 func Serve(ctx context.Context, root string, configuration config.Config, stdout, stderr io.Writer) (returnErr error) {
+	exportDependencies, err := ResolveExportDependencies(configuration.Downloads)
+	if err != nil {
+		return err
+	}
 	resolver, err := content.NewResolver(root, configuration)
 	if err != nil {
 		return err
 	}
-	handler, err := web.NewHandler(resolver, log.New(stderr, "", log.LstdFlags))
+	handler, err := newHTTPHandler(resolver, log.New(stderr, "", log.LstdFlags), exportDependencies)
 	if err != nil {
 		return fmt.Errorf("initialize HTTP handler: %w", err)
 	}
@@ -63,6 +71,20 @@ func Serve(ctx context.Context, root string, configuration config.Config, stdout
 	}
 
 	return serveHTTP(ctx, listener, handler, 5*time.Second)
+}
+
+func newHTTPHandler(resolver *content.Resolver, logger *log.Logger, dependencies ExportDependencies) (http.Handler, error) {
+	renderer := render.NewRenderer()
+	pdfConverter, err := pdfexport.New(resolver, logger)
+	if err != nil {
+		return nil, fmt.Errorf("initialize PDF export: %w", err)
+	}
+	var docxConverter documentexport.Converter
+	if dependencies.PandocExecutable != "" {
+		docxConverter = docx.New(dependencies.PandocExecutable, resolver, renderer, logger)
+	}
+	exporter := documentexport.NewService(pdfConverter, docxConverter)
+	return web.NewHandlerWithExporter(resolver, renderer, exporter, logger)
 }
 
 func serveHTTP(ctx context.Context, listener net.Listener, handler http.Handler, shutdownTimeout time.Duration) error {

@@ -18,6 +18,9 @@ func TestLoadAbsentUsesDefaults(t *testing.T) {
 	if configuration.Server.Socket != "" || configuration.IncludeHidden || len(configuration.Exclude) != 0 {
 		t.Fatalf("Load() = %+v, want safe defaults", configuration)
 	}
+	if !configuration.Downloads.ExportDOCX || configuration.Downloads.Pandoc != "" {
+		t.Fatalf("Downloads = %+v, want DOCX enabled with automatic pandoc discovery", configuration.Downloads)
+	}
 }
 
 func TestLoadValidConfiguration(t *testing.T) {
@@ -28,6 +31,10 @@ include_hidden = true
 [server]
 host = "localhost"
 port = 4000
+
+[downloads]
+export_docx = false
+pandoc = "/opt/pandoc/bin/pandoc"
 `)
 
 	configuration, err := Load(root)
@@ -43,8 +50,17 @@ port = 4000
 	if len(configuration.Exclude) != 2 || configuration.Exclude[0] != "drafts/**" {
 		t.Fatalf("Exclude = %#v", configuration.Exclude)
 	}
-	if !configuration.hostSet || !configuration.portSet || configuration.socketSet {
-		t.Fatalf("source presence = host:%v port:%v socket:%v", configuration.hostSet, configuration.portSet, configuration.socketSet)
+	if configuration.Downloads.ExportDOCX || configuration.Downloads.Pandoc != "/opt/pandoc/bin/pandoc" {
+		t.Fatalf("Downloads = %+v, want explicit disabled DOCX configuration", configuration.Downloads)
+	}
+	if !configuration.hostSet || !configuration.portSet || configuration.socketSet || !configuration.pandocSet {
+		t.Fatalf(
+			"source presence = host:%v port:%v socket:%v pandoc:%v",
+			configuration.hostSet,
+			configuration.portSet,
+			configuration.socketSet,
+			configuration.pandocSet,
+		)
 	}
 }
 
@@ -69,9 +85,12 @@ func TestLoadRejectsInvalidTOML(t *testing.T) {
 		{name: "malformed", content: "[server\n", want: "parse .mavis.conf"},
 		{name: "unknown top-level key", content: "unknown = true\n", want: "unknown"},
 		{name: "unknown server key", content: "[server]\nunknown = true\n", want: "unknown"},
+		{name: "unknown downloads key", content: "[downloads]\nunknown = true\n", want: "downloads.unknown"},
 		{name: "wrong exclude type", content: "exclude = true\n", want: "exclude"},
 		{name: "wrong hidden type", content: "include_hidden = \"yes\"\n", want: "include_hidden"},
 		{name: "wrong port type", content: "[server]\nport = \"3344\"\n", want: "port"},
+		{name: "wrong DOCX type", content: "[downloads]\nexport_docx = \"yes\"\n", want: "downloads.export_docx"},
+		{name: "wrong pandoc type", content: "[downloads]\npandoc = true\n", want: "downloads.pandoc"},
 	}
 
 	for _, test := range tests {
@@ -98,6 +117,10 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{name: "negative port", content: "[server]\nport = -1\n", want: "server.port"},
 		{name: "large port", content: "[server]\nport = 65536\n", want: "server.port"},
 		{name: "empty socket", content: "[server]\nsocket = \"\"\n", want: "server.socket"},
+		{name: "empty pandoc", content: "[downloads]\npandoc = \"\"\n", want: "downloads.pandoc"},
+		{name: "blank pandoc", content: "[downloads]\npandoc = \" \\t \"\n", want: "downloads.pandoc"},
+		{name: "empty pandoc with DOCX disabled", content: "[downloads]\nexport_docx = false\npandoc = \"\"\n", want: "downloads.pandoc"},
+		{name: "blank pandoc with DOCX disabled", content: "[downloads]\nexport_docx = false\npandoc = \"   \"\n", want: "downloads.pandoc"},
 	}
 
 	for _, test := range tests {

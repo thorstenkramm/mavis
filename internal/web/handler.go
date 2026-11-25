@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"html/template"
 	"io"
@@ -10,9 +11,12 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
+	"time"
 	"unicode/utf8"
 
 	"github.com/thorstenkramm/mavis/internal/content"
+	documentexport "github.com/thorstenkramm/mavis/internal/export"
 	"github.com/thorstenkramm/mavis/internal/render"
 )
 
@@ -23,18 +27,31 @@ type MarkdownRenderer interface {
 	Render(source []byte, documentPath string, authorize render.AccessFunc) (render.Document, error)
 }
 
+// Exporter generates complete document attachments without writing HTTP responses.
+type Exporter interface {
+	Export(ctx context.Context, resource content.Resource, format documentexport.Format) (documentexport.Result, error)
+	DOCXAvailable() bool
+}
+
 type webHandler struct {
-	resolver *content.Resolver
-	renderer MarkdownRenderer
-	files    http.Handler
-	pages    *template.Template
-	logger   *log.Logger
-	readFile func(string) ([]byte, error)
+	resolver      *content.Resolver
+	renderer      MarkdownRenderer
+	exporter      Exporter
+	files         http.Handler
+	assets        fs.FS
+	pages         *template.Template
+	logger        *log.Logger
+	readFile      func(string) ([]byte, error)
+	search        func(context.Context, string) (content.SearchResults, error)
+	searchTimeout time.Duration
+	searches      chan struct{}
 }
 
 type pageModel struct {
 	Title          string
 	Navigation     []content.NavigationItem
+	Search         searchModel
+	Download       *downloadModel
 	Content        template.HTML
 	TOC            []render.TOCItem
 	Entries        []entryModel
@@ -50,6 +67,13 @@ type entryModel struct {
 	URL  string
 }
 
+type downloadModel struct {
+	MarkdownURL string
+	PDFURL      string
+	DOCXURL     string
+	RawURL      string
+}
+
 // NewHandler constructs the embedded asset and dynamic content routes.
 func NewHandler(resolver *content.Resolver, logger *log.Logger) (http.Handler, error) {
 	return NewHandlerWithRenderer(resolver, render.NewRenderer(), logger)
@@ -57,6 +81,19 @@ func NewHandler(resolver *content.Resolver, logger *log.Logger) (http.Handler, e
 
 // NewHandlerWithRenderer constructs routes with an injectable Markdown renderer.
 func NewHandlerWithRenderer(resolver *content.Resolver, renderer MarkdownRenderer, logger *log.Logger) (http.Handler, error) {
+	return NewHandlerWithExporter(resolver, renderer, nil, logger)
+}
+
+// NewHandlerWithExporter constructs routes with injectable rendering and export services.
+func NewHandlerWithExporter(resolver *content.Resolver, renderer MarkdownRenderer, exporter Exporter, logger *log.Logger) (http.Handler, error) {
+	handler, err := newHandler(resolver, renderer, exporter, logger)
+	if err != nil {
+		return nil, err
+	}
+	return handler.routes(), nil
+}
+
+func newHandler(resolver *content.Resolver, renderer MarkdownRenderer, exporter Exporter, logger *log.Logger) (*webHandler, error) {
 	if logger == nil {
 		logger = log.New(io.Discard, "", 0)
 	}
@@ -68,22 +105,31 @@ func NewHandlerWithRenderer(resolver *content.Resolver, renderer MarkdownRendere
 	if err != nil {
 		return nil, err
 	}
-	handler := &webHandler{
-		resolver: resolver,
-		renderer: renderer,
-		files:    content.NewFileHandler(resolver, logger),
-		pages:    pages,
-		logger:   logger,
-		readFile: os.ReadFile,
-	}
+	return &webHandler{
+		resolver:      resolver,
+		renderer:      renderer,
+		exporter:      exporter,
+		files:         content.NewFileHandler(resolver, logger),
+		assets:        assets,
+		pages:         pages,
+		logger:        logger,
+		readFile:      os.ReadFile,
+		search:        resolver.Search,
+		searchTimeout: searchTimeout,
+		searches:      make(chan struct{}, concurrentSearches),
+	}, nil
+}
+
+func (handler *webHandler) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET "+assetPrefix, http.StripPrefix(assetPrefix, http.FileServer(http.FS(assets))))
+	mux.Handle("GET "+assetPrefix, http.StripPrefix(assetPrefix, http.FileServer(http.FS(handler.assets))))
 	mux.Handle(navigationPath, http.HandlerFunc(handler.serveNavigation))
+	mux.Handle("GET "+searchPath, http.HandlerFunc(handler.serveSearch))
 	mux.Handle("/", handler)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setSecurityHeaders(writer.Header())
 		mux.ServeHTTP(writer, request)
-	}), nil
+	})
 }
 
 func (handler *webHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -104,6 +150,11 @@ func (handler *webHandler) ServeHTTP(writer http.ResponseWriter, request *http.R
 	}
 	if render.IsMarkdown(resource.Info.Name()) {
 		handler.serveMarkdown(writer, request, *resource, resource.RelativePath, displayName(resource.RelativePath))
+		return
+	}
+	download := request.URL.Query().Get("download")
+	if download != "" && (download != "1" || request.URL.Query().Get("raw") != "1") {
+		http.Error(writer, "Unsupported download format", http.StatusBadRequest)
 		return
 	}
 	if request.URL.Query().Get("raw") != "1" && handler.serveViewer(writer, request, *resource) {
@@ -148,6 +199,7 @@ func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http
 	handler.writePage(writer, http.StatusOK, pageModel{
 		Title:      viewer.Name,
 		Navigation: navigation,
+		Download:   &downloadModel{RawURL: content.URLFor(resource.RelativePath, false) + "?download=1&raw=1"},
 		Viewer:     viewer,
 	})
 	return true
@@ -162,6 +214,10 @@ func (handler *webHandler) serveDirectory(writer http.ResponseWriter, request *h
 	title := displayName(resource.RelativePath)
 	if directory.README != nil {
 		handler.serveMarkdown(writer, request, *directory.README, resource.RelativePath, title)
+		return
+	}
+	if request.URL.Query().Get("download") != "" {
+		http.Error(writer, "Unsupported download format", http.StatusBadRequest)
 		return
 	}
 	navigation, err := handler.resolver.Navigation(resource.RelativePath)
@@ -180,6 +236,18 @@ func (handler *webHandler) serveDirectory(writer http.ResponseWriter, request *h
 }
 
 func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *http.Request, resource content.Resource, navigationPath, title string) {
+	switch documentexport.Format(request.URL.Query().Get("download")) {
+	case "":
+	case "markdown":
+		handler.serveOriginalDownload(writer, request, resource)
+		return
+	case documentexport.PDF, documentexport.DOCX:
+		handler.serveGeneratedDownload(writer, request, resource)
+		return
+	default:
+		http.Error(writer, "Unsupported download format", http.StatusBadRequest)
+		return
+	}
 	navigation, err := handler.resolver.Navigation(navigationPath)
 	if err != nil {
 		handler.writeContentError(writer, request, resource.RelativePath, err)
@@ -205,14 +273,70 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 	if document.Title != "" {
 		title = document.Title
 	}
+	download := &downloadModel{
+		MarkdownURL: content.URLFor(resource.RelativePath, false) + "?download=markdown",
+		PDFURL:      content.URLFor(resource.RelativePath, false) + "?download=pdf",
+	}
+	if handler.exporter != nil && handler.exporter.DOCXAvailable() {
+		download.DOCXURL = content.URLFor(resource.RelativePath, false) + "?download=docx"
+	}
 	handler.writePage(writer, http.StatusOK, pageModel{
 		Title:          title,
 		Navigation:     navigation,
+		Download:       download,
 		Content:        template.HTML(document.HTML),
 		TOC:            document.TOC,
 		FrontMatter:    document.FrontMatter,
 		HasFrontMatter: document.HasFrontMatter,
 	})
+}
+
+func (handler *webHandler) serveGeneratedDownload(writer http.ResponseWriter, request *http.Request, resource content.Resource) {
+	if handler.exporter == nil {
+		http.Error(writer, "Download format unavailable", http.StatusNotFound)
+		return
+	}
+	format := documentexport.Format(request.URL.Query().Get("download"))
+	result, err := handler.exporter.Export(request.Context(), resource, format)
+	if err != nil {
+		handler.writeExportError(writer, resource.RelativePath, err)
+		return
+	}
+	writer.Header().Set("Content-Type", result.ContentType)
+	writer.Header().Set("Content-Disposition", content.AttachmentDisposition(result.Filename))
+	writer.Header().Set("Content-Length", strconv.Itoa(len(result.Body)))
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.WriteHeader(http.StatusOK)
+	if request.Method == http.MethodHead {
+		return
+	}
+	if _, err := writer.Write(result.Body); err != nil {
+		handler.logger.Printf("write generated download %q: %v", resource.RelativePath, err)
+	}
+}
+
+func (handler *webHandler) writeExportError(writer http.ResponseWriter, relativePath string, err error) {
+	switch {
+	case errors.Is(err, documentexport.ErrUnknownFormat):
+		http.Error(writer, "Unsupported download format", http.StatusBadRequest)
+	case errors.Is(err, documentexport.ErrUnavailable):
+		http.Error(writer, "Download format unavailable", http.StatusNotFound)
+	case errors.Is(err, documentexport.ErrSourceTooLarge):
+		http.Error(writer, "Export source is too large", http.StatusRequestEntityTooLarge)
+	case errors.Is(err, documentexport.ErrTimeout):
+		http.Error(writer, "Export timed out", http.StatusServiceUnavailable)
+	default:
+		handler.logger.Printf("export content %q: %v", relativePath, err)
+		http.Error(writer, "Export failed", http.StatusInternalServerError)
+	}
+}
+
+func (handler *webHandler) serveOriginalDownload(writer http.ResponseWriter, request *http.Request, resource content.Resource) {
+	download := request.Clone(request.Context())
+	download.URL.Path = "/" + resource.RelativePath
+	download.URL.RawPath = content.URLFor(resource.RelativePath, false)
+	download.URL.RawQuery = "download=1&raw=1"
+	handler.files.ServeHTTP(writer, download)
 }
 
 func (handler *webHandler) authorize(rootRelativePath string) bool {
@@ -257,7 +381,7 @@ func (handler *webHandler) writePage(writer http.ResponseWriter, status int, mod
 }
 
 func setSecurityHeaders(header http.Header) {
-	header.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' http: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+	header.Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' http: https:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 	header.Set("Referrer-Policy", "no-referrer")
 	header.Set("X-Content-Type-Options", "nosniff")
 	header.Set("X-Frame-Options", "DENY")

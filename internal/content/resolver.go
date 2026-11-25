@@ -22,6 +22,7 @@ type Resolver struct {
 	root          string
 	includeHidden bool
 	exclusions    config.Exclusions
+	readDir       func(string) ([]os.DirEntry, error)
 }
 
 // Resource is a resolved eligible filesystem entry.
@@ -57,6 +58,7 @@ func NewResolver(root string, configuration config.Config) (*Resolver, error) {
 		root:          resolvedRoot,
 		includeHidden: configuration.IncludeHidden,
 		exclusions:    exclusions,
+		readDir:       os.ReadDir,
 	}, nil
 }
 
@@ -85,19 +87,43 @@ func (resolver *Resolver) ResolveLogical(decoded string) (*Resource, error) {
 
 // hasExactSpelling rejects filesystem aliases (including case variants) that
 // are not the actual entry name. This keeps the same policy on all volumes.
-func (resolver *Resolver) hasExactSpelling(relative string) bool {
+func (resolver *Resolver) hasExactSpelling(relative string) (bool, error) {
 	dir := resolver.root
 	if relative == "" || relative == "." {
-		return true
+		return true, nil
 	}
 	for _, component := range strings.Split(relative, "/") {
-		entries, err := os.ReadDir(dir)
-		if err != nil || !slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return e.Name() == component }) {
-			return false
+		entries, err := resolver.readDir(dir)
+		if err != nil {
+			return false, err
+		}
+		if !slices.ContainsFunc(entries, func(e fs.DirEntry) bool { return e.Name() == component }) {
+			return false, nil
 		}
 		dir = filepath.Join(dir, component)
 	}
-	return true
+	return true, nil
+}
+
+func (resolver *Resolver) requireExactSpelling(relative, resolvedPath string) error {
+	exact, err := resolver.hasExactSpelling(relative)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w: %w", ErrNotFound, err)
+	}
+	if err != nil {
+		return fmt.Errorf("verify exact content spelling: %w", err)
+	}
+	if !exact {
+		// EvalSymlinks already found this target. If it no longer exists, the
+		// omission is an operational race rather than a spelling-policy denial.
+		if _, statErr := os.Stat(resolvedPath); errors.Is(statErr, fs.ErrNotExist) {
+			return fmt.Errorf("%w: %w", ErrNotFound, statErr)
+		} else if statErr != nil {
+			return fmt.Errorf("inspect content after spelling verification: %w", statErr)
+		}
+		return ErrNotFound
+	}
+	return nil
 }
 
 // fromListing means ReadDir supplied the name and its parent was already verified.
@@ -108,7 +134,7 @@ func (resolver *Resolver) resolveEntry(logicalPath string, fromListing bool) (*R
 	candidate := filepath.Join(resolver.root, filepath.FromSlash(logicalPath))
 	resolvedPath, err := filepath.EvalSymlinks(candidate)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("resolve content: %w", err)
@@ -118,13 +144,22 @@ func (resolver *Resolver) resolveEntry(logicalPath string, fromListing bool) (*R
 		return nil, ErrNotFound
 	}
 	target := filepath.ToSlash(targetPath)
-	if !resolver.visible(target) || (!fromListing && !resolver.hasExactSpelling(logicalPath)) ||
-		(target != logicalPath && !resolver.hasExactSpelling(target)) {
+	if !resolver.visible(target) {
 		return nil, ErrNotFound
+	}
+	if !fromListing {
+		if err := resolver.requireExactSpelling(logicalPath, resolvedPath); err != nil {
+			return nil, err
+		}
+	}
+	if target != logicalPath {
+		if err := resolver.requireExactSpelling(target, resolvedPath); err != nil {
+			return nil, err
+		}
 	}
 	info, err := os.Stat(resolvedPath)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("inspect content: %w", err)
@@ -151,18 +186,26 @@ func (resolver *Resolver) resolveEntry(logicalPath string, fromListing bool) (*R
 
 // List returns eligible entries in one directory without walking descendants.
 func (resolver *Resolver) List(requestPath string) ([]Resource, error) {
+	resources, _, err := resolver.list(requestPath)
+	return resources, err
+}
+
+// list additionally reports eligible entries that failed after enumeration.
+// Policy exclusions and outside-root links remain silent omissions.
+func (resolver *Resolver) list(requestPath string) ([]Resource, bool, error) {
 	directory, err := resolver.ResolveLogical(requestPath)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !directory.Info.IsDir() {
-		return nil, ErrNotFound
+		return nil, false, ErrNotFound
 	}
-	entries, err := os.ReadDir(directory.Path)
+	entries, err := resolver.readDir(directory.Path)
 	if err != nil {
-		return nil, fmt.Errorf("read directory: %w", err)
+		return nil, false, fmt.Errorf("read directory: %w", err)
 	}
 	resources := make([]Resource, 0, len(entries))
+	incomplete := false
 	for _, entry := range entries {
 		logicalPath := entry.Name()
 		if directory.RelativePath != "" {
@@ -173,11 +216,14 @@ func (resolver *Resolver) List(requestPath string) ([]Resource, error) {
 		}
 		resource, err := resolver.resolveEntry(logicalPath, true)
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) || !errors.Is(err, ErrNotFound) {
+				incomplete = true
+			}
 			continue
 		}
 		resources = append(resources, *resource)
 	}
-	return resources, nil
+	return resources, incomplete, nil
 }
 
 func (resolver *Resolver) visible(relativePath string) bool {

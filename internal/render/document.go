@@ -63,7 +63,7 @@ func renderDocument(source []byte, documentPath string, authorize AccessFunc) (D
 	markdown := NewMarkdown()
 	ctx := parser.NewContext()
 	// Keep document fragments distinct from controls in web/templates/page.html.
-	for _, reserved := range []string{"main-content", "navigation-toggle", "file-navigation", "navigation-close", "navigation-backdrop", "sidebar-resizer"} {
+	for _, reserved := range []string{"main-content", "navigation-toggle", "file-navigation", "navigation-close", "navigation-backdrop", "sidebar-resizer", "search-region", "documentation-search"} {
 		ctx.IDs().Put([]byte(reserved))
 	}
 	parsed := markdown.Parser().Parse(text.NewReader(body), parser.WithContext(ctx))

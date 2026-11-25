@@ -66,6 +66,18 @@ directly. Raw PDFs alone permit framing by the same Mavis origin so the built-in
 `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`. Other raw content retains `frame-ancestors 'none'` and
 `X-Frame-Options: DENY`. Viewer and raw representations use the same content-authorization checks.
 
+## Search and generated downloads
+
+Full-text search traverses through the same resolver policy as navigation and direct requests. It reads current text on
+demand without an index or external search service. Hidden, excluded, private, invalid, and outside-root content cannot
+contribute paths or excerpts. Search results escape source text before highlighting it.
+
+Original downloads use the same authorization checks as their ordinary representations. PDF and DOCX conversion removes
+front matter and applies resolver checks to embedded local images. PDF generation is self-contained and offline. DOCX
+conversion supplies pandoc with sanitized, self-contained article HTML under `--sandbox`, without original filesystem
+paths or remote images. Generated output is buffered and validated before an attachment is returned; conversion failures
+and search failures use generic responses without filesystem or process details.
+
 ## Network exposure
 
 The default listener is loopback-only. Non-loopback binding requires explicit configuration and displays a warning:

@@ -97,6 +97,9 @@ func TestHeadingIDsNeverCollideWithTemplateControls(t *testing.T) {
 	var source strings.Builder
 	source.WriteString("# Title\n")
 	for _, match := range matches {
+		if match[1] == "search-results-title" {
+			continue // This control is only rendered on the search route.
+		}
 		source.WriteString("\n## " + strings.ReplaceAll(match[1], "-", " ") + "\n")
 	}
 	root := t.TempDir()
@@ -104,6 +107,9 @@ func TestHeadingIDsNeverCollideWithTemplateControls(t *testing.T) {
 	body := requestWeb(newWebHandler(t, root, render.NewRenderer(), nil), "/guide.md").Body.String()
 	for _, match := range matches {
 		id := match[1]
+		if id == "search-results-title" {
+			continue
+		}
 		if strings.Count(body, `id="`+id+`"`) != 1 || !strings.Contains(body, `id="`+id+`-1"`) || !strings.Contains(body, `href="#`+id+`-1"`) {
 			t.Errorf("heading ID collides with template control %q", id)
 		}

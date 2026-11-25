@@ -18,6 +18,8 @@ Command-line flags configure one run without changing the file.
 | `[server].host` | `127.0.0.1` |
 | `[server].port` | `3344` |
 | `[server].socket` | none |
+| `[downloads].export_docx` | `true` |
+| `[downloads].pandoc` | none; discover `pandoc` in `PATH` |
 
 With no configuration or flags, `mavis serve .` listens on loopback TCP and prints `http://localhost:3344`.
 
@@ -57,6 +59,22 @@ mavis serve . --socket /tmp/mavis.sock
 A socket is an alternative to TCP, not an additional listener. Defaults do not conflict with socket mode, but an
 explicitly configured host or port combined with `socket` is an error. This includes conflicts between file and CLI
 values. Unix sockets are supported on macOS and Linux; Windows reports an actionable unsupported-listener error.
+
+## DOCX export example
+
+```toml
+[downloads]
+export_docx = true
+pandoc = "/opt/pandoc/bin/pandoc"
+```
+
+Omit `pandoc` to discover an executable named `pandoc` in `PATH`. Set `export_docx = false` to disable DOCX
+and skip executable discovery, even when `pandoc` is configured:
+
+```toml
+[downloads]
+export_docx = false
+```
 
 ## CLI flags
 
@@ -119,9 +137,26 @@ Binding to a non-loopback host requires explicit configuration. Mavis displays a
 access may read the served files and does not enable authentication. Use non-loopback binding only when that exposure
 is acceptable.
 
+### `[downloads]`
+
+`export_docx` controls optional DOCX conversion and defaults to `true`. When it is enabled and `pandoc` is omitted,
+Mavis performs one `PATH` lookup for `pandoc` during startup. If the executable is absent, Mavis still starts and DOCX
+is unavailable. Setting `export_docx = false` always disables DOCX and skips all executable lookup, including a
+configured `pandoc` value.
+
+Set `pandoc` to a non-empty executable name or path to override automatic discovery of the default name. A name is
+resolved through `PATH`; an absolute or relative path is checked directly. Mavis uses the resolved executable for the
+whole serving session. An explicitly configured executable that cannot be resolved is a startup error; Mavis does not
+fall back to another `pandoc` in `PATH`. Empty and whitespace-only values are configuration errors even when
+`export_docx = false`.
+
+Installing, removing, or replacing pandoc and changing `PATH` or executable permissions take effect only after Mavis
+restarts. Services often have a different `PATH` from an interactive shell: configure the service manager's `PATH` or
+use an absolute path, and ensure the Mavis service account can access and execute pandoc and any files it requires.
+
 ## Validation
 
-Unknown keys, malformed TOML, invalid value types, empty hosts, invalid ports, empty socket paths, invalid exclusion
-patterns, and listener conflicts are startup errors. Mavis names the affected setting and exits without opening a
-listener. Environment-variable expansion, path interpolation, and configuration discovery outside the served root
-are not performed.
+Unknown keys, malformed TOML, invalid value types, empty hosts, invalid ports, empty socket paths, empty explicit
+pandoc values, unresolvable explicit pandoc executables, invalid exclusion patterns, and listener conflicts are startup
+errors. Mavis names the affected setting and exits without opening a listener. Environment-variable expansion, path
+interpolation, and configuration discovery outside the served root are not performed.

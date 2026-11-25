@@ -71,6 +71,62 @@ button {
   transform: translateY(0);
 }
 
+.search-region {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--sidebar);
+}
+
+.search-form {
+  max-width: 70rem;
+  margin: 0 auto;
+}
+
+.search-form > label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.search-controls {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.search-controls input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.45rem;
+  background: var(--background);
+  color: var(--text);
+  font: inherit;
+}
+
+.search-controls button {
+  flex: 0 0 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--accent-dark);
+  border-radius: 0.45rem;
+  background: var(--accent-dark);
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.search-controls button:hover {
+  background: var(--accent);
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -368,6 +424,79 @@ button {
   font-weight: 700;
 }
 
+.document-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.viewer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.download-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.download-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.45rem;
+  background: var(--background);
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.download-summary::-webkit-details-marker {
+  display: none;
+}
+
+.download-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.download-options {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 20;
+  min-width: 10rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.3rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.45rem;
+  background: var(--background);
+  box-shadow: 0 0.4rem 1.2rem rgb(23 32 51 / 18%);
+}
+
+.download-options a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.3rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.download-options a:hover {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 .text-viewer {
   max-height: calc(100vh - 12rem);
   white-space: pre;
@@ -440,6 +569,70 @@ button {
   accent-color: var(--accent);
 }
 
+.search-results {
+  min-width: 0;
+}
+
+.search-results > h1 {
+  margin-bottom: 1rem;
+}
+
+.search-summary,
+.search-result-excerpt,
+.search-result-path,
+.search-notice {
+  overflow-wrap: anywhere;
+}
+
+.search-result-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-result h2 {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 1.35rem;
+}
+
+.search-result-link {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.search-result-path {
+  margin: 0.15rem 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.search-result-excerpt {
+  margin: 0;
+}
+
+.search-result-excerpt mark {
+  padding: 0 0.1rem;
+  border-radius: 0.15rem;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.search-notice {
+  margin-top: 1rem;
+  padding: 0.65rem 0.8rem;
+  border-left: 4px solid var(--accent);
+  background: var(--sidebar);
+  color: var(--text);
+}
+
 .directory-list {
   padding: 0;
   list-style: none;
@@ -502,6 +695,10 @@ button {
 }
 
 @media (max-width: 48rem) {
+  .search-region {
+    padding: 0.65rem 0.75rem;
+  }
+
   .topbar {
     position: relative;
     z-index: 20;
@@ -587,6 +784,16 @@ button {
 
   .document h1 {
     font-size: 2rem;
+  }
+}
+
+@media (max-width: 24rem) {
+  .search-controls {
+    flex-wrap: wrap;
+  }
+
+  .search-controls input {
+    flex-basis: 100%;
   }
 }
 
