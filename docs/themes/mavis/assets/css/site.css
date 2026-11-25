@@ -2,10 +2,10 @@
    All colors come from the tokens below; dark mode only swaps tokens. */
 
 :root {
-  --mv-brand: #f0531c;
-  --mv-brand-strong: #c23d0a; /* brand for text and links: AA contrast on white */
-  --mv-brand-fill: #c43d0b;   /* brand background behind white text: AA contrast */
-  --mv-brand-fill-hover: #a83306;
+  --mv-brand: #0f8a87;
+  --mv-brand-strong: #0b6b6b; /* brand for text and links: AA contrast on white */
+  --mv-brand-fill: #0b6b6b;   /* brand background behind white text: AA contrast */
+  --mv-brand-fill-hover: #084f4f;
   --mv-bg: #ffffff;
   --mv-surface: #f6f7f9;
   --mv-surface-raised: #ffffff;
@@ -14,7 +14,7 @@
   --mv-muted: #59636e;
   --mv-border: #e3e6ea;
   --mv-code-bg: #f6f8fa;
-  --mv-code-text: #9a2f08;
+  --mv-code-text: #0a5c5c;
   --mv-header-bg: rgba(255, 255, 255, 0.9);
   --mv-shadow: 0 6px 24px rgba(17, 20, 24, 0.08);
   --mv-header-height: 64px;
@@ -29,7 +29,8 @@
 }
 
 html[data-theme="dark"] {
-  --mv-brand-strong: #ff8a5c;
+  --mv-brand: #2ba8a4;
+  --mv-brand-strong: #5cc8c4;
   --mv-bg: #0e1013;
   --mv-surface: #15181d;
   --mv-surface-raised: #1b1f25;
@@ -38,7 +39,7 @@ html[data-theme="dark"] {
   --mv-muted: #9aa3ad;
   --mv-border: #2a2f36;
   --mv-code-bg: #0d1117;
-  --mv-code-text: #ffb38f;
+  --mv-code-text: #8fe0dc;
   --mv-header-bg: rgba(14, 16, 19, 0.88);
   --mv-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
   --mv-note: #4493f8;
@@ -81,7 +82,7 @@ hr, .uk-hr { border-top-color: var(--mv-border); }
 
 em { color: inherit; }
 
-::selection { background: rgba(240, 83, 28, 0.25); color: inherit; }
+::selection { background: rgba(15, 138, 135, 0.25); color: inherit; }
 
 :focus-visible { outline: 2px solid var(--mv-brand); outline-offset: 2px; }
 
@@ -127,6 +128,14 @@ html[data-theme="dark"] .mv-when-light { display: none; }
 
 .mv-logo { gap: 10px; font-weight: 700; font-size: 1.3rem; letter-spacing: -0.02em; color: var(--mv-heading); }
 .mv-logo:hover { text-decoration: none; color: var(--mv-heading); }
+/* The mark: a viewfinder frame around the M. */
+.mv-logo-mark { flex: 0 0 auto; width: 28px; height: 28px; }
+.mv-logo-frame { stroke: var(--mv-heading); }
+.mv-logo-letter { stroke: var(--mv-brand-strong); }
+.mv-hero-brand { display: flex; align-items: center; gap: 0.25em; }
+.mv-hero-brand .mv-logo-mark { width: 1em; height: 1em; }
+.mv-hero-brand .mv-logo-frame { stroke: #fff; }
+.mv-hero-brand .mv-logo-letter { stroke: #5cc8c4; }
 
 .mv-icon-button {
   border: 0;
@@ -191,7 +200,7 @@ html[data-theme="dark"] .mv-when-light { display: none; }
 .mv-search-hit-title { display: block; font-weight: 600; color: var(--mv-heading); }
 .mv-search-hit-section { display: block; font-size: 0.78rem; color: var(--mv-muted); }
 .mv-search-hit-text { display: block; font-size: 0.85rem; color: var(--mv-muted); margin-top: 2px; }
-.mv-search-results mark { background: rgba(240, 83, 28, 0.2); color: inherit; border-radius: 2px; padding: 0 1px; }
+.mv-search-results mark { background: rgba(15, 138, 135, 0.2); color: inherit; border-radius: 2px; padding: 0 1px; }
 .mv-search-empty { padding: 12px; color: var(--mv-muted); margin: 0; }
 
 @media (max-width: 639px) {
@@ -248,7 +257,7 @@ html[data-theme="dark"] .mv-when-light { display: none; }
 .mv-nav.uk-nav-default > li.uk-active > a,
 .mv-offcanvas-bar .mv-nav.uk-nav-default > li.uk-active > a {
   color: var(--mv-brand-strong);
-  background: rgba(240, 83, 28, 0.09);
+  background: rgba(15, 138, 135, 0.09);
   font-weight: 600;
 }
 
@@ -463,8 +472,8 @@ html[data-theme="dark"] .mv-when-light { display: none; }
   position: relative;
   padding: 72px 0 88px;
   background:
-    radial-gradient(900px 420px at 85% 10%, rgba(240, 83, 28, 0.28), transparent 70%),
-    radial-gradient(700px 500px at 0% 100%, rgba(240, 83, 28, 0.12), transparent 70%),
+    radial-gradient(900px 420px at 85% 10%, rgba(15, 138, 135, 0.28), transparent 70%),
+    radial-gradient(700px 500px at 0% 100%, rgba(15, 138, 135, 0.12), transparent 70%),
     #050505;
   color: #d4d7dc;
 }
@@ -518,7 +527,7 @@ html[data-theme="dark"] .mv-when-light { display: none; }
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: rgba(240, 83, 28, 0.12);
+  background: rgba(15, 138, 135, 0.12);
   color: var(--mv-brand);
   margin-bottom: 14px;
 }

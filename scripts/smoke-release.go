@@ -102,9 +102,10 @@ func smokeTest(binary string) (result error) {
 		return err
 	}
 	for _, expected := range []string{
-		`<title>Release Smoke · Mavis</title>`, `<span class="current-page">Release Smoke</span>`,
+		`<title>Release Smoke · Mavis</title>`, `<svg class="brand-mark"`, `id="theme-toggle"`,
 		`<h1 id="release-smoke">Release Smoke</h1>`, "<table>", `aria-label="Packaged"`,
-		`<details class="front-matter"><summary>Front matter</summary>`,
+		`<details class="front-matter"><summary><span class="front-matter-title">Front matter</span>`,
+		`<span class="front-matter-key">title</span><span class="front-matter-value">&lt;Release Metadata&gt;</span>`,
 		`<code class="language-yaml">title: &lt;Release Metadata&gt;`,
 		`<details class="download-menu">`, `href="/README.md?download=docx"`,
 	} {
@@ -194,8 +195,8 @@ func checkSearch(ctx context.Context, baseURL, root, home string) error {
 	searchPosition := strings.Index(home, `id="search-region"`)
 	headerPosition := strings.Index(home, `<header class="topbar">`)
 	layoutPosition := strings.Index(home, `<div class="layout">`)
-	if searchPosition < 0 || headerPosition < searchPosition || layoutPosition < headerPosition {
-		return fmt.Errorf("top search bar is not above the header and layout")
+	if headerPosition < 0 || searchPosition < headerPosition || layoutPosition < searchPosition {
+		return fmt.Errorf("search field is not in the header above the layout")
 	}
 	navigationStart := strings.Index(home, `<nav class="sidebar"`)
 	navigationEnd := strings.Index(home, `</nav>`)

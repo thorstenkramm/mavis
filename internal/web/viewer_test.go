@@ -3,7 +3,6 @@ package web
 import (
 	"bytes"
 	"errors"
-	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -195,7 +194,7 @@ func newFailingReadHandler(t *testing.T, root string) *webHandler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, err := template.ParseFS(embedded, "templates/page.html")
+	pages, err := parsePages()
 	if err != nil {
 		t.Fatal(err)
 	}

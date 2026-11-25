@@ -32,6 +32,31 @@
     }
   };
 
+  const themeToggle = document.getElementById("theme-toggle");
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      writePreference("mavis.theme.v1", next);
+    });
+  }
+
+  const searchInput = document.getElementById("documentation-search");
+  if (searchInput) {
+    // "/" jumps to search unless the user is already typing somewhere.
+    document.addEventListener("keydown", (event) => {
+      const target = event.target;
+      const typing = target instanceof HTMLElement &&
+        (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+      if (event.key !== "/" || typing || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    });
+  }
+
   if (!toggle || !sidebar || !closeButton || !backdrop || !main) {
     return;
   }
@@ -244,30 +269,19 @@
     const { children, name } = folderElements(button);
     button.setAttribute("aria-expanded", String(expanded));
     button.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${name ? name.textContent : "folder"}`);
-    const arrow = button.querySelector(".navigation-arrow");
-    if (arrow) {
-      arrow.textContent = expanded ? "▾" : "▸";
-    }
     if (children) {
       children.hidden = !expanded;
     }
   };
 
-  const createNavigationIcon = (directory) => {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "navigation-icon");
-    svg.setAttribute("viewBox", "0 0 16 16");
-    svg.setAttribute("aria-hidden", "true");
-    svg.setAttribute("focusable", "false");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", directory
-      ? "M1.5 3.5h4l1.5 2h7.5v7h-13z"
-      : "M3.5 1.5h5l4 4v9h-9zM8.5 1.5v4h4");
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-linejoin", "round");
-    svg.append(path);
-    return svg;
+  // Icon names come from the server; anything unexpected falls back to the neutral file icon.
+  const createNavigationIcon = (icon) => {
+    const image = document.createElement("img");
+    image.className = "navigation-icon";
+    image.src = `/_mavis/assets/icons/${/^[a-z0-9-]+$/.test(icon || "") ? icon : "file"}.svg`;
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    return image;
   };
 
   const createNavigationEntry = (entry) => {
@@ -298,7 +312,7 @@
     const link = document.createElement("a");
     link.className = "navigation-link";
     link.href = entry.url;
-    link.append(createNavigationIcon(entry.directory));
+    link.append(createNavigationIcon(entry.directory ? "folder" : entry.icon));
     const name = document.createElement("span");
     name.className = "navigation-name";
     name.textContent = entry.name;

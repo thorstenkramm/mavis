@@ -8,9 +8,10 @@ icon: search
 
 ## Search from the top bar
 
-Enter text in the full-width **Search documentation** field above the file browser and content, then press **Enter** or
-activate **Search**. Mavis displays results in the main content area and retains the query in the search bar. Search,
-result links, and the form work with a keyboard and without JavaScript.
+Enter text in the **Search documentation** field in the top bar, then press **Enter** or activate **Search**. Press
+**/** to move to the field from anywhere on the page. Mavis displays results in the main content area and retains the
+query in the search field. Search, result links, and the form work with a keyboard and without JavaScript; only the
+**/** shortcut needs JavaScript.
 
 Each result leads with the matching filename as its normal document or viewer link. The complete root-relative path
 appears below it to distinguish equal filenames in different folders. A contextual excerpt highlights matching text and

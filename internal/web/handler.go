@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -50,24 +51,36 @@ type webHandler struct {
 }
 
 type pageModel struct {
-	EditURL        string
-	Title          string
-	Navigation     []content.NavigationItem
-	Search         searchModel
-	Download       *downloadModel
-	Content        template.HTML
-	TOC            []render.TOCItem
-	Entries        []entryModel
-	FrontMatter    string
-	HasFrontMatter bool
-	Viewer         *viewerModel
-	ShowListing    bool
-	ShowTitle      bool
+	EditURL          string
+	Title            string
+	Navigation       []content.NavigationItem
+	Breadcrumbs      []crumbModel
+	Search           searchModel
+	Download         *downloadModel
+	Content          template.HTML
+	TOC              []render.TOCItem
+	Entries          []entryModel
+	FrontMatter      string
+	FrontMatterTree  []frontMatterNode
+	FrontMatterCount string
+	HasFrontMatter   bool
+	Viewer           *viewerModel
+	ShowListing      bool
+	ShowTitle        bool
 }
 
 type entryModel struct {
 	Name string
 	URL  string
+	Icon string
+	Kind string
+}
+
+// crumbModel is one step of the path from the content root to the page.
+type crumbModel struct {
+	Name    string
+	URL     string
+	Current bool
 }
 
 type downloadModel struct {
@@ -101,7 +114,7 @@ func newHandler(resolver *content.Resolver, renderer MarkdownRenderer, exporter 
 	if logger == nil {
 		logger = log.New(io.Discard, "", 0)
 	}
-	pages, err := template.ParseFS(embedded, "templates/page.html")
+	pages, err := parsePages()
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +137,29 @@ func newHandler(resolver *content.Resolver, renderer MarkdownRenderer, exporter 
 		searchTimeout: searchTimeout,
 		searches:      make(chan struct{}, concurrentSearches),
 	}, nil
+}
+
+// parsePages loads the page template with the helpers it depends on.
+func parsePages() (*template.Template, error) {
+	return template.New("page.html").Funcs(template.FuncMap{"icon": iconFor}).ParseFS(embedded, "templates/page.html")
+}
+
+// breadcrumbs lists the ancestors of a root-relative path followed by the
+// page itself. The content root has no trail.
+func breadcrumbs(relativePath string) []crumbModel {
+	if relativePath == "" || relativePath == "." {
+		return nil
+	}
+	parts := strings.Split(relativePath, "/")
+	crumbs := make([]crumbModel, 0, len(parts))
+	for index, part := range parts {
+		if index == len(parts)-1 {
+			crumbs = append(crumbs, crumbModel{Name: part, Current: true})
+			break
+		}
+		crumbs = append(crumbs, crumbModel{Name: part, URL: content.URLFor(strings.Join(parts[:index+1], "/"), true)})
+	}
+	return crumbs
 }
 
 func (handler *webHandler) routes() http.Handler {
@@ -205,11 +241,12 @@ func (handler *webHandler) serveViewer(writer http.ResponseWriter, request *http
 		return true
 	}
 	handler.writePage(writer, http.StatusOK, pageModel{
-		Title:      viewer.Name,
-		EditURL:    editURL,
-		Navigation: navigation,
-		Download:   &downloadModel{RawURL: content.URLFor(resource.RelativePath, false) + "?download=1&raw=1"},
-		Viewer:     viewer,
+		Title:       viewer.Name,
+		EditURL:     editURL,
+		Navigation:  navigation,
+		Breadcrumbs: breadcrumbs(resource.RelativePath),
+		Download:    &downloadModel{RawURL: content.URLFor(resource.RelativePath, false) + "?download=1&raw=1"},
+		Viewer:      viewer,
 	})
 	return true
 }
@@ -234,11 +271,20 @@ func (handler *webHandler) serveDirectory(writer http.ResponseWriter, request *h
 		handler.writeContentError(writer, request, resource.RelativePath, err)
 		return
 	}
-	model := pageModel{Title: title, Navigation: navigation, ShowListing: true, ShowTitle: true}
+	model := pageModel{
+		Title:       title,
+		Navigation:  navigation,
+		Breadcrumbs: breadcrumbs(resource.RelativePath),
+		ShowListing: true,
+		ShowTitle:   true,
+	}
 	for _, entry := range directory.Entries {
+		name := path.Base(entry.RelativePath)
 		model.Entries = append(model.Entries, entryModel{
-			Name: path.Base(entry.RelativePath),
+			Name: name,
 			URL:  content.URLFor(entry.RelativePath, entry.Info.IsDir()),
+			Icon: iconFor(name, entry.Info.IsDir()),
+			Kind: kindFor(name, entry.Info.IsDir()),
 		})
 	}
 	handler.writePage(writer, http.StatusOK, model)
@@ -272,10 +318,11 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 		handler.logger.Printf("render content %q: %v", resource.RelativePath, err)
 		fallback := render.FallbackDocument()
 		handler.writePage(writer, http.StatusInternalServerError, pageModel{
-			Title:      title,
-			Navigation: navigation,
-			Content:    template.HTML(fallback.HTML),
-			TOC:        fallback.TOC,
+			Title:       title,
+			Navigation:  navigation,
+			Breadcrumbs: breadcrumbs(navigationPath),
+			Content:     template.HTML(fallback.HTML),
+			TOC:         fallback.TOC,
 		})
 		return
 	}
@@ -289,16 +336,24 @@ func (handler *webHandler) serveMarkdown(writer http.ResponseWriter, request *ht
 	if handler.exporter != nil && handler.exporter.DOCXAvailable() {
 		download.DOCXURL = content.URLFor(resource.RelativePath, false) + "?download=docx"
 	}
-	handler.writePage(writer, http.StatusOK, pageModel{
+	model := pageModel{
 		Title:          title,
 		Navigation:     navigation,
+		Breadcrumbs:    breadcrumbs(navigationPath),
 		Download:       download,
 		EditURL:        handler.editTemplate.URL(resource.RelativePath),
 		Content:        template.HTML(document.HTML),
 		TOC:            document.TOC,
 		FrontMatter:    document.FrontMatter,
 		HasFrontMatter: document.HasFrontMatter,
-	})
+	}
+	if document.HasFrontMatter {
+		if tree, ok := parseFrontMatter(document.FrontMatter); ok {
+			model.FrontMatterTree = tree
+			model.FrontMatterCount = frontMatterCount(tree)
+		}
+	}
+	handler.writePage(writer, http.StatusOK, model)
 }
 
 func (handler *webHandler) serveGeneratedDownload(writer http.ResponseWriter, request *http.Request, resource content.Resource) {

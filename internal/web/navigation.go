@@ -17,6 +17,7 @@ type navigationEntry struct {
 	RelativePath string `json:"path"`
 	URL          string `json:"url"`
 	Directory    bool   `json:"directory"`
+	Icon         string `json:"icon"`
 }
 
 type navigationResponse struct {
@@ -42,11 +43,13 @@ func (handler *webHandler) serveNavigation(writer http.ResponseWriter, request *
 	}
 	response := navigationResponse{Entries: make([]navigationEntry, 0, len(entries))}
 	for _, entry := range entries {
+		name := path.Base(entry.RelativePath)
 		response.Entries = append(response.Entries, navigationEntry{
-			Name:         path.Base(entry.RelativePath),
+			Name:         name,
 			RelativePath: entry.RelativePath,
 			URL:          content.URLFor(entry.RelativePath, entry.Info.IsDir()),
 			Directory:    entry.Info.IsDir(),
+			Icon:         iconFor(name, entry.Info.IsDir()),
 		})
 	}
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")

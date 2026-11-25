@@ -8,6 +8,7 @@
                   aria-label="Open navigation" aria-controls="mv-offcanvas"><span uk-navbar-toggle-icon></span></button>
           {{- end }}
           <a class="uk-navbar-item uk-logo mv-logo" href="{{ "/" | relURL }}" aria-label="Mavis home">
+            {{ partial "logo-mark.html" . }}
             <span>mavis</span>
           </a>
           <ul class="uk-navbar-nav uk-visible@m">

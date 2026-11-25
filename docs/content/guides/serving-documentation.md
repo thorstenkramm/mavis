@@ -23,8 +23,8 @@ scanning the entire tree for every page.
 
 ## File browser
 
-Distinct icons identify files and folders. Use the arrow button beside a folder to load and reveal its children without
-leaving the current document; activate it again to hide the descendants. Each folder retains its own state. The buttons
+Icons identify folders and file types such as Markdown, YAML, and Python; other files share a neutral icon. Use the
+arrow button beside a folder to load and reveal its children without leaving the current document; activate it again to hide the descendants. Each folder retains its own state. The buttons
 are keyboard accessible with **Tab**, **Enter**, and **Space**, while folder names remain ordinary links to directory
 pages.
 
@@ -32,6 +32,15 @@ Mavis stores the folders you expand locally in the browser and restores them aft
 document's ancestry is always revealed, but folders opened only for that reason are not saved. If browser storage is
 unavailable, expansion continues to work for the open page. Without JavaScript, root entries, current ancestry, and ordinary folder links remain available; opening a folder
 link renders that directory and its ancestry on the server.
+
+## Directory trail and color theme
+
+Above each document, viewer, and directory listing, a trail links every parent folder back to the content root.
+Directory listings show each entry's icon, name, and type: **Folder**, **Markdown**, or the file's extension.
+
+Mavis follows the operating system's light or dark preference. The button at the right of the top bar switches the
+theme and stores the choice locally in the browser under `mavis.theme.v1`. Without JavaScript, Mavis uses the light
+theme.
 
 ## Markdown documents
 

@@ -14,7 +14,7 @@ func TestMarkdownDownloadMenuUsesNativeAccessibleFormats(t *testing.T) {
 		`<div class="document-toolbar">`,
 		`<details class="download-menu"><summary class="download-summary">`,
 		`aria-hidden="true" focusable="false"`,
-		`<span>Download</span>`,
+		`<span class="visually-hidden">Download</span>`, `class="download-caret"`,
 		`href="/README.md?download=markdown">Markdown</a>`,
 		`href="/README.md?download=pdf">PDF</a>`,
 		`href="/README.md?download=docx">DOCX</a>`,

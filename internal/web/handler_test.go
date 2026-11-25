@@ -27,7 +27,7 @@ func TestRootREADMEUsesDynamicSecureHTML(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<article class="document">`, `<h1 id="welcome">Welcome</h1>`, `<strong>documentation</strong>`,
-		`<title>Welcome · Mavis</title>`, `<span class="current-page">Welcome</span>`,
+		`<title>Welcome · Mavis</title>`, `<a class="brand" href="/">`, `id="theme-toggle"`,
 		`aria-label="Documentation files"`, `aria-label="On this page"`, `href="#section"`,
 		`href="/_mavis/assets/app.css"`,
 	} {
@@ -56,7 +56,7 @@ func TestMarkdownTitlesUseFirstH1WithFilenameFallback(t *testing.T) {
 	handler := newWebHandler(t, root, render.NewRenderer(), nil)
 
 	page := requestWeb(handler, "/guide.md").Body.String()
-	for _, want := range []string{`<title>Actual Title · Mavis</title>`, `<span class="current-page">Actual Title</span>`} {
+	for _, want := range []string{`<title>Actual Title · Mavis</title>`, `<span aria-current="location">guide.md</span>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page does not contain %q: %s", want, page)
 		}
@@ -74,7 +74,9 @@ func TestFrontMatterUsesCollapsedEscapedPanel(t *testing.T) {
 
 	page := requestWeb(handler, "/metadata.md").Body.String()
 	for _, want := range []string{
-		`<details class="front-matter"><summary>Front matter</summary>`,
+		`<details class="front-matter"><summary><span class="front-matter-title">Front matter</span><span class="front-matter-count">1 field</span></summary>`,
+		`<span class="front-matter-key">title</span><span class="front-matter-value">&lt;script&gt;alert(1)&lt;/script&gt;</span>`,
+		`<details class="front-matter-source"><summary>View YAML</summary>`,
 		`<code class="language-yaml">title: &lt;script&gt;alert(1)&lt;/script&gt;`,
 		`<h1 id="visible-heading">Visible heading</h1>`,
 	} {

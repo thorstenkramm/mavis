@@ -10,11 +10,27 @@ import (
 
 var cssColorPattern = regexp.MustCompile(`--([a-z-]+):\s*(#[0-9a-fA-F]{6});`)
 
-func TestWCAGAAColorContrast(t *testing.T) {
-	colors := make(map[string]string)
-	for _, match := range cssColorPattern.FindAllStringSubmatch(readEmbeddedText(t, "static/app.css"), -1) {
-		colors[match[1]] = match[2]
+const darkThemeSelector = `:root[data-theme="dark"] {`
+
+// themeColors returns the custom properties of the light and dark palettes.
+func themeColors(t *testing.T) map[string]map[string]string {
+	t.Helper()
+	stylesheet := readEmbeddedText(t, "static/app.css")
+	darkStart := strings.Index(stylesheet, darkThemeSelector)
+	if darkStart < 0 {
+		t.Fatal("stylesheet has no dark theme")
 	}
+	darkEnd := darkStart + strings.Index(stylesheet[darkStart:], "}")
+	palettes := map[string]map[string]string{"light": {}, "dark": {}}
+	for name, block := range map[string]string{"light": stylesheet[:darkStart], "dark": stylesheet[darkStart:darkEnd]} {
+		for _, match := range cssColorPattern.FindAllStringSubmatch(block, -1) {
+			palettes[name][match[1]] = match[2]
+		}
+	}
+	return palettes
+}
+
+func TestWCAGAAColorContrast(t *testing.T) {
 	tests := []struct {
 		name       string
 		foreground string
@@ -28,29 +44,28 @@ func TestWCAGAAColorContrast(t *testing.T) {
 		{name: "links on page", foreground: "accent", background: "background", minimum: 4.5},
 		{name: "links on sidebar", foreground: "accent", background: "sidebar", minimum: 4.5},
 		{name: "current page", foreground: "accent-dark", background: "accent-soft", minimum: 4.5},
-		{name: "search highlight", foreground: "accent-dark", background: "accent-soft", minimum: 4.5},
-		{name: "search button", foreground: "background", background: "accent-dark", minimum: 4.5},
+		{name: "search highlight", foreground: "mark-text", background: "mark", minimum: 4.5},
+		{name: "hovered row", foreground: "text", background: "hover", minimum: 4.5},
+		{name: "code", foreground: "text", background: "code", minimum: 4.5},
 		{name: "skip link", foreground: "background", background: "text", minimum: 4.5},
-		{name: "focus on page", foreground: "#005fcc", background: "background", minimum: 3},
-		{name: "focus on sidebar", foreground: "#005fcc", background: "sidebar", minimum: 3},
-		{name: "focus on current page", foreground: "#005fcc", background: "accent-soft", minimum: 3},
+		{name: "focus on page", foreground: "focus", background: "background", minimum: 3},
+		{name: "focus on sidebar", foreground: "focus", background: "sidebar", minimum: 3},
+		{name: "focus on current page", foreground: "focus", background: "accent-soft", minimum: 3},
 		{name: "control border on page", foreground: "control-border", background: "background", minimum: 3},
 		{name: "control border on sidebar", foreground: "control-border", background: "sidebar", minimum: 3},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			foreground := test.foreground
-			if !strings.HasPrefix(foreground, "#") {
-				foreground = colors[foreground]
-			}
-			background := colors[test.background]
-			if foreground == "" || background == "" {
-				t.Fatalf("missing CSS colors for %q and %q", test.foreground, test.background)
-			}
-			if ratio := contrastRatio(t, foreground, background); ratio < test.minimum {
-				t.Fatalf("contrast ratio = %.2f:1, want at least %.1f:1 (%s on %s)", ratio, test.minimum, foreground, background)
-			}
-		})
+	for theme, colors := range themeColors(t) {
+		for _, test := range tests {
+			t.Run(theme+"/"+test.name, func(t *testing.T) {
+				foreground, background := colors[test.foreground], colors[test.background]
+				if foreground == "" || background == "" {
+					t.Fatalf("missing CSS colors for %q and %q", test.foreground, test.background)
+				}
+				if ratio := contrastRatio(t, foreground, background); ratio < test.minimum {
+					t.Fatalf("contrast ratio = %.2f:1, want at least %.1f:1 (%s on %s)", ratio, test.minimum, foreground, background)
+				}
+			})
+		}
 	}
 }
 

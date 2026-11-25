@@ -8,7 +8,7 @@ icon: download
 
 ## Choose a format
 
-Open the **Download** menu at the top-right of a Markdown document or file viewer. The native menu works with a keyboard,
+Open the **Download** menu, the download icon at the top-right of a Markdown document or file viewer. The native menu works with a keyboard,
 on mobile screens, and without JavaScript. Directory listings do not have a download menu.
 
 Markdown documents offer:

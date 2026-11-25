@@ -94,6 +94,15 @@ root-relative paths, escaped contextual excerpts, and highlighted matches outsid
 spanned the viewport above the header, controls met the 44-pixel target minimum, and neither home nor results pages had
 horizontal overflow.
 
+## Interface redesign
+
+The redesign of **November 25, 2026** moved search into the top bar and added breadcrumbs, the front-matter tree,
+file-type icons, and light and dark themes. It was checked manually in one Chromium build at 1440×900 and 375×812:
+document, directory, and search pages in both themes, the saved theme choice across navigation, the expanded
+front-matter tree, and the absence of horizontal page overflow on mobile. Controls are 36 pixels high on desktop and
+44 pixels at mobile widths. The four-engine matrix and search verification above predate the redesign and have not
+been repeated for it.
+
 Mobile drawer checks confirmed that the search region and main content become inert, programmatic focus cannot enter the
 search field, Tab and Shift+Tab remain within the drawer, Escape closes it, and focus returns to the Files button. Axe-core
 4.11.x WCAG A/AA scans of search results and mobile navigation reported **zero violations in every engine and viewport**.

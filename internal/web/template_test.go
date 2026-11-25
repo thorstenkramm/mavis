@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"html/template"
 	"regexp"
 	"strings"
 	"testing"
@@ -12,7 +11,7 @@ import (
 )
 
 func TestPageTemplateSemanticStates(t *testing.T) {
-	pages, err := template.ParseFS(embedded, "templates/page.html")
+	pages, err := parsePages()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +28,8 @@ func TestPageTemplateSemanticStates(t *testing.T) {
 			Title: "Setup", Fragment: "#setup", Level: 1,
 			Children: []render.TOCItem{{Title: "Install", Fragment: "#install", Level: 2}},
 		}},
-		Entries:     []entryModel{{Name: "guide", URL: "/guide/"}},
+		Entries:     []entryModel{{Name: "guide", URL: "/guide/", Icon: iconFolder, Kind: "Folder"}},
+		Breadcrumbs: breadcrumbs("guide/setup.md"),
 		ShowListing: true,
 	}
 	var output bytes.Buffer
@@ -47,7 +47,9 @@ func TestPageTemplateSemanticStates(t *testing.T) {
 		`href="/guide/"`, `href="/reference/"`,
 		`class="navigation-icon"`, `aria-hidden="true" focusable="false"`,
 		`<ul class="navigation-children" hidden></ul>`,
-		`href="#setup"`, `href="#install"`, `class="directory-list"`,
+		`href="#setup"`, `href="#install"`, `<table class="directory-list">`,
+		`src="/_mavis/assets/icons/folder.svg"`, `src="/_mavis/assets/icons/markdown.svg"`, `<td>Folder</td>`,
+		`<nav class="breadcrumbs" aria-label="Breadcrumb">`, `<a href="/guide/">guide</a>`, `<span aria-current="location">setup.md</span>`,
 		`&lt;Documentation&gt;`,
 	} {
 		if !strings.Contains(body, want) {

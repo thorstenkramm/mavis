@@ -256,7 +256,7 @@ func TestSearchResultsAreFilenameLedEscapedAndOutsideNavigation(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<form class="search-form" action="/_mavis/search" method="get" role="search">`,
-		`<label for="documentation-search">Search documentation</label>`,
+		`<label class="visually-hidden" for="documentation-search">Search documentation</label>`,
 		`type="search" value="&lt;script&gt;alert(1)&lt;/script&gt;"`,
 		`<a class="search-result-link" href="/other/guide.md">guide.md</a>`,
 		`<p class="search-result-path">space dir/guide &amp; more.md</p>`,
@@ -277,8 +277,8 @@ func TestSearchResultsAreFilenameLedEscapedAndOutsideNavigation(t *testing.T) {
 	searchPosition := strings.Index(body, `id="search-region"`)
 	headerPosition := strings.Index(body, `<header class="topbar">`)
 	layoutPosition := strings.Index(body, `<div class="layout">`)
-	if searchPosition < 0 || headerPosition < searchPosition || layoutPosition < headerPosition {
-		t.Fatalf("search region is not above header and layout: %s", body)
+	if headerPosition < 0 || searchPosition < headerPosition || layoutPosition < searchPosition {
+		t.Fatalf("search region is not inside the header above the layout: %s", body)
 	}
 	navigation := between(body, `<nav class="sidebar"`, `</nav>`)
 	if strings.Contains(navigation, "documentation-search") || strings.Contains(navigation, "search-results") {
