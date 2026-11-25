@@ -178,7 +178,9 @@ func fitText(value string, available float64, measure func(string) float64) stri
 	return ""
 }
 
-var lineBreakTag = regexp.MustCompile(`(?i)^<br\s*/?>$`)
+// Goldmark has already parsed this RawHTML node as a single tag, including
+// its attributes. Match the element name without confusing <break> with <br>.
+var lineBreakTag = regexp.MustCompile(`(?i)^<br[\s/>]`)
 
 // lineBreakMarker is the String node value that stands for an explicit break.
 const lineBreakMarker = "\n"

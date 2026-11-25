@@ -222,6 +222,11 @@ type limitedBuffer struct {
 	err     error
 }
 
+// NewOutputBuffer bounds intermediate output at the same limit as downloads.
+func NewOutputBuffer() *limitedBuffer { return &limitedBuffer{maximum: MaxOutputSize} }
+
+func (buffer *limitedBuffer) Err() error { return buffer.err }
+
 func (buffer *limitedBuffer) Write(data []byte) (int, error) {
 	if buffer.err != nil {
 		return 0, buffer.err

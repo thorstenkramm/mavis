@@ -31,10 +31,11 @@ resulting PDF.
 PDF export removes front matter and represents common Markdown text, headings, emphasis, lists, tables, links, code, and
 eligible local PNG, JPEG, and GIF images. Layout is intentionally simplified rather than browser-identical.
 
-The PDF carries a bookmark for every heading, nested by heading level, so PDF viewers show the document's outline in
-their navigation pane. Pages use 2 cm margins and a footer with the file name and page number. Headings are bold and stay with the text that
-follows them, and a list item is not split from its bullet at a page break. A `<br>` element and a Markdown hard line
-break start a new line; other raw HTML is omitted. Spaces and hyphens that the embedded fonts lack, such as the narrow
+Each nonempty heading has a bookmark in the PDF navigation pane, nested by heading level. The top and side margins are
+2 cm; the deeper bottom margin holds the file name (without its extension) and page number. The layout reserves room
+for text after a heading and for the first line of a bulleted item. Long headings and large blocks such as images can
+still span a page boundary. In flowing text, an inline `<br>` or a Markdown hard break starts a new line; table cells
+use a space instead. Other raw HTML is omitted. Spaces and hyphens that the embedded fonts lack, such as the narrow
 no-break space in "z. B.", are drawn as ordinary or no-break spaces and hyphens, and soft hyphens are dropped.
 
 Unsupported images, including SVG, and rasters above 8,388,608 pixels appear as a **Preview unavailable** placeholder. Characters unavailable in the

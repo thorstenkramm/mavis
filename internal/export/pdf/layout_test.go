@@ -5,6 +5,9 @@ import (
 	"context"
 	"io"
 	"log"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,6 +15,9 @@ import (
 	"github.com/go-swiss/fonts"
 	goldpdf "github.com/stephenafamo/goldmark-pdf"
 	"github.com/stephenafamo/goldmark-pdf/gopdf"
+	"github.com/thorstenkramm/mavis/internal/config"
+	pdfdoc "seehuhn.de/go/pdf"
+	"seehuhn.de/go/pdf/pagetree"
 )
 
 // layoutPDF records the layout calls that recordingPDF ignores and lets a
@@ -21,21 +27,27 @@ type layoutPDF struct {
 	y        float64
 	pages    int
 	fonts    []string
+	advances []float64
 	circles  []float64
 	anchors  []string
 	margins  [4]float64
 	position [2]float64
-	outline  *documentOutline
 }
 
-// recordingFactory makes Convert use backend and captures its outline.
+// recordingFactory makes Convert use backend.
 func recordingFactory(backend *layoutPDF) backendFactory {
 	return func(context.Context, gopdf.Config, fonts.Cache) goldpdf.PDF {
 		return backend
 	}
 }
 
-func (pdf *layoutPDF) AddPage()                 { pdf.pages++; pdf.y = 56 }
+func (pdf *layoutPDF) AddPage() { pdf.pages++; pdf.y = 56 }
+func (pdf *layoutPDF) WriteText(h float64, value string) {
+	if value == "\n" {
+		pdf.advances = append(pdf.advances, h)
+	}
+	pdf.recordingPDF.WriteText(h, value)
+}
 func (pdf *layoutPDF) GetY() float64            { return pdf.y }
 func (pdf *layoutPDF) SetX(x float64)           { pdf.position[0] = x }
 func (pdf *layoutPDF) SetY(y float64)           { pdf.position[1] = y }
@@ -108,6 +120,21 @@ func TestLineBreakIsNotFollowedByAnIndent(t *testing.T) {
 	}
 	if flow := strings.Join(recorder.texts, ""); !strings.Contains(flow, "first\nsecond") || !strings.Contains(flow, "next paragraph") {
 		t.Fatalf("flow = %q", flow)
+	}
+}
+
+func TestHeadingBreakUsesHeadingLeadingAndCodeRemainsBold(t *testing.T) {
+	c, err := New(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := &layoutPDF{}
+	c.newBackend = recordingFactory(b)
+	if err = c.Convert(context.Background(), []byte("# first<br class='print'>`second`"), "test.md", io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.advances) != 1 || b.advances[0] != 28 || !strings.Contains(strings.Join(b.fonts, ","), "Roboto Mono/B") {
+		t.Fatalf("line advances=%v fonts=%v", b.advances, b.fonts)
 	}
 }
 
@@ -202,13 +229,13 @@ func TestHeadingsAndBulletsMoveToTheNextPageTogetherWithTheirText(t *testing.T) 
 		t.Fatalf("stranded heading: pages=%d y=%v anchors=%v", backend.pages, backend.y, backend.anchors)
 	}
 
-	// A cursor already in the bottom margin belongs to the footer and must
-	// never start another page.
+	// The footer uses gopdf directly. An out-of-bounds body cursor still
+	// needs a fresh page before recording the heading's destination.
 	backend.y = limit + 5
 	glyphs.AddInternalLink("footer")
 	glyphs.Circle(10, backend.y, 2)
-	if backend.pages != 2 {
-		t.Fatalf("drawing in the bottom margin added a page: %d", backend.pages)
+	if backend.pages != 3 {
+		t.Fatalf("body overflow did not start a fresh page: %d", backend.pages)
 	}
 }
 
@@ -255,11 +282,95 @@ func TestMultiPageDocumentHasAFooterOnEveryPage(t *testing.T) {
 		source.WriteString("## Section\n\nParagraph with enough words to fill a line of the page and wrap once or twice.\n\n- item one\n- item two\n\n")
 	}
 	var output bytes.Buffer
-	if err := converter.Convert(context.Background(), []byte(source.String()), "docs/A very long file name that the footer must shorten instead of overlapping the page number at all.md", &output); err != nil {
+	if err := converter.Convert(context.Background(), []byte(source.String()), "docs/My guide.md", &output); err != nil {
 		t.Fatalf("Convert() error = %v", err)
 	}
 	pages := bytes.Count(output.Bytes(), []byte("/Type /Page\n")) + bytes.Count(output.Bytes(), []byte("/Type /Page "))
 	if pages < 3 {
 		t.Fatalf("document has %d pages, want several; size %d", pages, output.Len())
+	}
+	textPages := extractPages(t, output.Bytes())
+	if len(textPages) != pages {
+		t.Fatalf("extracted %d of %d pages", len(textPages), pages)
+	}
+	for i, page := range textPages {
+		lines := strings.Split(strings.TrimSpace(page), "\n")
+		footer := strings.Join(strings.Fields(lines[len(lines)-1]), " ")
+		if footer != "My guide "+strconv.Itoa(i+1) || strings.Count(page, "My guide") != 1 {
+			t.Fatalf("page %d footer: %q", i+1, footer)
+		}
+	}
+}
+
+// Use an independent reader when Poppler is installed. PDF generation itself
+// never invokes an external tool.
+func extractPages(t *testing.T, data []byte) []string {
+	t.Helper()
+	tool, err := exec.LookPath("pdftotext")
+	if err != nil {
+		t.Skip("PDF text extraction needs Poppler")
+	}
+	cmd := exec.Command(tool, "-layout", "-", "-")
+	cmd.Stdin = bytes.NewReader(data)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSuffix(string(out), "\f"), "\f")
+}
+
+func TestVisibleBodyAfterRepeatedBreaks(t *testing.T) {
+	c, err := New(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	source := "```text\n\u00ad\n```\n\n# Start\n\na" + strings.Repeat("<br>", 90) + "AfterBreaks<br><https://example.com> tail"
+	if err = c.Convert(context.Background(), []byte(source), "test.md", &out); err != nil {
+		t.Fatal(err)
+	}
+	pages := extractPages(t, out.Bytes())
+	last := pages[len(pages)-1]
+	if len(pages) < 3 || !strings.Contains(last, "AfterBreaks\nhttps://example.com tail") {
+		t.Fatalf("pages=%d last=%q", len(pages), last)
+	}
+}
+
+func TestBlockFirstListMarkerIsOnTheContentPage(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "sample.png"), previewUnavailablePNG)
+	c, err := New(testResolver(t, root, config.Default()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []string{"# Target<br>second<br>third", "![Target](sample.png)"} {
+		var out bytes.Buffer
+		source := "first" + strings.Repeat("<br>", 38) + "end\n\n- " + item + "\n\nNext paragraph."
+		if err := c.Convert(context.Background(), []byte(source), "guide.md", &out); err != nil {
+			t.Fatal(err)
+		}
+		pages := extractPages(t, out.Bytes())
+		if len(pages) != 2 || !strings.Contains(pages[1], "Target") || !strings.Contains(pages[1], "Next paragraph.") {
+			t.Fatalf("%s: text pages %q", item, pages)
+		}
+		r, err := pdfdoc.NewReader(bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cursor := pdfdoc.NewCursor(r)
+		for i := range pages {
+			_, p, err := pagetree.GetPage(r, i)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := cursor.ReadAll(p["Contents"], 1<<20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			marker := bytes.Contains(data, []byte(" c\n"))
+			if marker != (i == 1) {
+				t.Fatalf("%s: page %d has bullet=%v", item, i+1, marker)
+			}
+		}
 	}
 }

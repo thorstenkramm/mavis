@@ -35,8 +35,6 @@ type Converter struct {
 	logger     *log.Logger
 	fonts      *offlineFontCache
 	newBackend backendFactory
-	// observeOutline, when set, receives each conversion's bookmark outline.
-	observeOutline func(*documentOutline)
 }
 
 // New constructs an offline Markdown-to-PDF converter. All font variants used
@@ -99,9 +97,6 @@ func (converter *Converter) Convert(
 	applyPageMargins(backend)
 	normalized := newGlyphPDF(backend, converter.fonts.coverage)
 	normalized.outline = newDocumentOutline(backend)
-	if converter.observeOutline != nil {
-		defer converter.observeOutline(normalized.outline)
-	}
 
 	renderer := goldpdf.New(
 		goldpdf.WithContext(ctx),

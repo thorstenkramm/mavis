@@ -16,8 +16,12 @@ import (
 // is eventually drawn.
 type glyphPDF struct {
 	goldpdf.PDF
-	coverage map[fontKey]runeCoverage
-	current  fontKey
+	coverage    map[fontKey]runeCoverage
+	current     fontKey
+	inHeading   bool
+	deferMarker bool
+	marker      *listBullet
+	stroke      [3]uint8
 	// outline receives a bookmark for every heading; nil disables bookmarks.
 	outline *documentOutline
 }
@@ -48,6 +52,8 @@ func (pdf *glyphPDF) AddFont(family string, style string, data []byte) error {
 func (pdf *glyphPDF) SetFont(family string, style string, size int) error {
 	if family == boldFamily {
 		family, style = bodyFamily, canonicalFontStyle(style, true)
+	} else if pdf.inHeading && family == goldpdf.FontRobotoMono.Family {
+		style = canonicalFontStyle(style, true)
 	}
 	pdf.current = fontKey{family: family, style: normalizeFontStyle(style)}
 	return pdf.PDF.SetFont(family, style, size)
@@ -58,6 +64,7 @@ func (pdf *glyphPDF) SetFont(family string, style string, size int) error {
 // one together with the text it introduces.
 func (pdf *glyphPDF) AddInternalLink(anchor string) {
 	pdf.breakPageUnlessFits(headingKeepWithNext)
+	pdf.drawMarker(pdf.GetY())
 	if pdf.outline != nil {
 		pdf.outline.mark(anchor)
 	}
@@ -68,7 +75,7 @@ func (pdf *glyphPDF) AddInternalLink(anchor string) {
 // document is serialized.
 func (pdf *glyphPDF) Write(destination io.Writer) error {
 	if pdf.outline != nil {
-		pdf.outline.link()
+		return pdf.outline.write(pdf.PDF, destination)
 	}
 	return pdf.PDF.Write(destination)
 }
@@ -79,7 +86,7 @@ func (pdf *glyphPDF) breakPageUnlessFits(required float64) float64 {
 	_, height := pdf.GetPageSize()
 	_, _, _, bottom := pdf.GetMargins()
 	top := pdf.GetY()
-	if limit := height - bottom; top > limit || top+required <= limit {
+	if limit := height - bottom; top+required <= limit {
 		return 0
 	}
 	pdf.AddPage()
@@ -90,7 +97,47 @@ func (pdf *glyphPDF) breakPageUnlessFits(required float64) float64 {
 // bullet at the very bottom of a page would be left behind when the text moves
 // to the next page. Break the page first when a body line no longer fits.
 func (pdf *glyphPDF) Circle(x, y, radius float64) {
+	if pdf.deferMarker {
+		pdf.marker = &listBullet{x: x, offset: y - pdf.GetY(), radius: radius, stroke: pdf.stroke}
+		return
+	}
 	pdf.PDF.Circle(x, y+pdf.breakPageUnlessFits(bodyLineHeight), radius)
+}
+
+type listBullet struct {
+	x, offset, radius float64
+	stroke            [3]uint8
+}
+
+func (pdf *glyphPDF) SetDrawColor(r, g, b uint8) {
+	pdf.stroke = [3]uint8{r, g, b}
+	pdf.PDF.SetDrawColor(r, g, b)
+}
+
+// Images choose their own page after registration and scaling. Position the
+// deferred marker at the top of the image on that page, using its original
+// stroke (gopdf draws circles with a stroked oval).
+func (pdf *glyphPDF) UseImage(id string, x, y, w, h float64) {
+	pdf.PDF.UseImage(id, x, y, w, h)
+	if pdf.marker == nil {
+		return
+	}
+	if h == 0 {
+		nw, nh := pdf.ImageNaturalSize(id)
+		if nw > 0 {
+			h = w * nh / nw
+		}
+	}
+	pdf.drawMarker(pdf.GetY() - h)
+}
+
+func (pdf *glyphPDF) drawMarker(y float64) {
+	if marker := pdf.marker; marker != nil {
+		pdf.PDF.SetDrawColor(marker.stroke[0], marker.stroke[1], marker.stroke[2])
+		pdf.PDF.Circle(marker.x, y+marker.offset, marker.radius)
+		pdf.PDF.SetDrawColor(pdf.stroke[0], pdf.stroke[1], pdf.stroke[2])
+		pdf.marker = nil
+	}
 }
 
 func (pdf *glyphPDF) WriteText(height float64, text string) {
@@ -122,7 +169,11 @@ func (pdf *glyphPDF) MeasureTextWidth(text string) float64 {
 }
 
 func (pdf *glyphPDF) SplitText(text string, width float64) []string {
-	return pdf.PDF.SplitText(pdf.normalize(text), width)
+	normalized := pdf.normalize(text)
+	if text != "" && normalized == "" {
+		return []string{""}
+	}
+	return pdf.PDF.SplitText(normalized, width)
 }
 
 func (pdf *glyphPDF) normalize(text string) string {
@@ -194,14 +245,91 @@ func substitute(r rune, supported func(rune) bool) rune {
 // visible replacements instead of silently disappearing.
 type glyphTextRenderer struct {
 	glyphs *glyphPDF
-	// afterBreak is set once an explicit line break was written, so the
-	// whitespace that follows it in the source does not indent the new line.
-	afterBreak bool
+	// Only whitespace immediately after a break is indentation. In particular,
+	// an autolink or image rendered by another handler ends that run.
+	trimNext ast.Node
 }
 
 func (renderer *glyphTextRenderer) RegisterFuncs(registerer goldpdf.NodeRendererFuncRegisterer) {
 	registerer.Register(ast.KindText, renderer.renderText)
 	registerer.Register(ast.KindString, renderer.renderText)
+	// Decorate the pinned renderer's heading and list-item handlers: layout
+	// must run before they emit the anchor or marker, respectively.
+	c := goldpdf.DefaultConfig()
+	c.AddDefaultNodeRenderers()
+	for _, entry := range c.NodeRenderers {
+		if defaults, ok := entry.Value.(goldpdf.NodeRenderer); ok {
+			defaults.RegisterFuncs(blockRegistrar(func(kind ast.NodeKind, render goldpdf.NodeRendererFunc) {
+				if kind == ast.KindHeading || kind == ast.KindListItem || kind == ast.KindImage {
+					registerer.Register(kind, renderer.beforeBlock(render))
+				}
+			}))
+		}
+	}
+}
+
+type blockRegistrar func(ast.NodeKind, goldpdf.NodeRendererFunc)
+
+func (f blockRegistrar) Register(kind ast.NodeKind, render goldpdf.NodeRendererFunc) { f(kind, render) }
+
+func (renderer *glyphTextRenderer) beforeBlock(render goldpdf.NodeRendererFunc) goldpdf.NodeRendererFunc {
+	return func(w *goldpdf.Writer, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+		switch node := node.(type) {
+		case *ast.ListItem:
+			first := node.FirstChild()
+			if first != nil && (first.Kind() == ast.KindParagraph || first.Kind() == ast.KindTextBlock) {
+				first = first.FirstChild()
+			}
+			if entering && first != nil && (first.Kind() == ast.KindHeading || first.Kind() == ast.KindImage) {
+				renderer.glyphs.deferMarker = true
+				defer func() { renderer.glyphs.deferMarker = false }()
+			}
+		case *ast.Image:
+			// If the authorized file disappeared before rendering, no UseImage
+			// call consumes the marker. Keep it on the item's original line.
+			if entering && renderer.glyphs.marker != nil {
+				defer renderer.glyphs.drawMarker(w.Pdf.GetY())
+			}
+		case *ast.Heading:
+			if entering {
+				renderer.glyphs.breakPageUnlessFits(renderer.headingRoom(w, source, node) + bodySize + 2*bodySpacing)
+			}
+			renderer.glyphs.inHeading = entering
+		}
+		return render(w, source, node, entering)
+	}
+}
+
+func (renderer *glyphTextRenderer) headingRoom(w *goldpdf.Writer, source []byte, h *ast.Heading) float64 {
+	styles := w.Styles
+	style := [...]*goldpdf.Style{styles.H1, styles.H2, styles.H3, styles.H4, styles.H5, styles.H6}[h.Level-1]
+	pdf := renderer.glyphs
+	goldpdf.SetStyle(pdf, *style)
+	defer goldpdf.SetStyle(pdf, *styles.Normal)
+	wid, height := pdf.GetPageSize()
+	left, top, right, bottom := pdf.GetMargins()
+	available := max(1, wid-left-right)
+	lines, used := 1, 0.0
+	space := pdf.MeasureTextWidth(" ")
+	for i, line := range strings.Split(headingText(h, source), "\n") {
+		if i > 0 {
+			lines++
+			used = 0
+		}
+		for word := range strings.FieldsSeq(line) {
+			width := pdf.MeasureTextWidth(word)
+			if used > 0 && used+width > available {
+				lines++
+				used = 0
+			}
+			for width > available {
+				lines++
+				width -= available
+			}
+			used += width + space
+		}
+	}
+	return min(height-top-bottom-bodySize-2*bodySpacing, max(headingKeepWithNext, float64(lines)*(style.Size+style.Spacing)+2*bodyLineHeight))
 }
 
 func (renderer *glyphTextRenderer) renderText(
@@ -216,38 +344,48 @@ func (renderer *glyphTextRenderer) renderText(
 
 	switch node := node.(type) {
 	case *ast.Text:
-		renderer.write(writer, string(node.Segment.Value(source)))
-		switch {
-		case node.HardLineBreak():
-			renderer.lineBreak(writer)
-		case node.SoftLineBreak():
-			renderer.write(writer, " ")
+		value := string(node.Segment.Value(source))
+		if node.SoftLineBreak() {
+			value += " "
+		}
+		renderer.write(writer, node, value)
+		if node.HardLineBreak() {
+			renderer.lineBreak(writer, node)
 		}
 	case *ast.String:
 		if string(node.Value) == lineBreakMarker {
-			renderer.lineBreak(writer)
+			renderer.lineBreak(writer, node)
 		} else {
-			renderer.write(writer, string(node.Value))
+			renderer.write(writer, node, string(node.Value))
 		}
 	}
 	return ast.WalkContinue, nil
 }
 
-func (renderer *glyphTextRenderer) write(writer *goldpdf.Writer, text string) {
-	if renderer.afterBreak {
+func (renderer *glyphTextRenderer) write(writer *goldpdf.Writer, node ast.Node, text string) {
+	if renderer.trimNext == node {
 		text = strings.TrimLeft(text, " \t")
+		if text == "" {
+			renderer.trimNext = node.NextSibling()
+			return
+		}
 	}
 	if text == "" {
 		return
 	}
-	renderer.afterBreak = false
+	renderer.trimNext = nil
 	writer.WriteText(renderer.glyphs.normalize(text))
 }
 
 // lineBreak ends the current line. Writer.WriteText flattens newlines to
 // spaces, so the break goes to the backend, which returns to the left margin
 // of the enclosing block.
-func (renderer *glyphTextRenderer) lineBreak(writer *goldpdf.Writer) {
-	writer.Pdf.WriteText(bodyLineHeight, "\n")
-	renderer.afterBreak = true
+func (renderer *glyphTextRenderer) lineBreak(writer *goldpdf.Writer, node ast.Node) {
+	// GetBacktickStyle copies the active style, changing only its font.
+	style := writer.GetBacktickStyle()
+	advance := style.Size + style.Spacing
+	if renderer.glyphs.breakPageUnlessFits(advance) == 0 {
+		writer.Pdf.WriteText(advance, "\n")
+	}
+	renderer.trimNext = node.NextSibling()
 }
