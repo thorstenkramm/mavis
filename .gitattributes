@@ -1,0 +1,6 @@
+# Keep LF on every OS so Windows checkouts do not fail gofmt checks.
+* text=auto eol=lf
+
+# Fixtures may be compared byte-for-byte or contain intentional line endings.
+*.golden -text
+**/testdata/** -text

@@ -1,0 +1,23 @@
+<footer class="mv-footer">
+  <div class="uk-container uk-container-large">
+    <div class="uk-grid-medium uk-flex-middle" uk-grid>
+      <div class="uk-width-expand@m">
+        <a class="mv-footer-brand" href="{{ "/" | relURL }}">mavis</a>
+        <p class="uk-margin-small-top uk-margin-remove-bottom">Markdown View Server. Local-first documentation in your browser.</p>
+      </div>
+      <div class="uk-width-auto@m">
+        <ul class="uk-subnav mv-footer-links">
+          {{- range site.Menus.main }}
+          <li><a href="{{ .URL }}">{{ .Name }}</a></li>
+          {{- end }}
+          <li><a href="{{ site.Params.releases }}">Releases</a></li>
+          <li><a href="{{ site.Params.repository }}/issues">Issues</a></li>
+          <li><a href="{{ site.Params.repository }}">GitHub</a></li>
+          {{- with site.GetPage "/privacy" }}
+          <li><a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+          {{- end }}
+        </ul>
+      </div>
+    </div>
+  </div>
+</footer>

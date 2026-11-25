@@ -1,0 +1,40 @@
+{{- /* Documentation frame shared by sections and pages: sidebar,
+     article, and the "on this page" table of contents. Context: a dict
+     with "page" and "body" (the rendered article body). */ -}}
+{{- $p := .page }}
+{{- $toc := and (ne $p.Params.toc false) (gt (len (findRE `<li>` $p.TableOfContents)) 1) }}
+<div id="mv-offcanvas" uk-offcanvas="overlay: true">
+  <div class="uk-offcanvas-bar mv-offcanvas-bar">
+    <button class="uk-offcanvas-close" type="button" uk-close aria-label="Close navigation"></button>
+    {{- partial "sidebar.html" $p }}
+  </div>
+</div>
+<div class="uk-container uk-container-large mv-doc-container">
+  <div class="mv-doc-grid{{ if $toc }} mv-has-toc{{ end }}">
+    <aside class="mv-sidebar uk-visible@m">
+      <div class="mv-sidebar-inner">{{ partial "sidebar.html" $p }}</div>
+    </aside>
+    <main id="main" class="mv-main" tabindex="-1">
+      <article class="mv-article">
+        {{- with $p.Parent }}{{ if not .IsHome }}
+        <p class="mv-eyebrow"><a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></p>
+        {{- end }}{{ end }}
+        <h1 class="mv-title">{{ $p.Title }}</h1>
+        {{- with $p.Description }}<p class="mv-lead">{{ . }}</p>{{ end }}
+        <div class="mv-content">
+          {{ .body }}
+        </div>
+        {{- partial "page-meta.html" $p }}
+        {{- partial "pager.html" $p }}
+      </article>
+    </main>
+    {{- if $toc }}
+    <aside class="mv-toc uk-visible@l" aria-label="On this page">
+      <div class="mv-toc-inner">
+        <p class="mv-toc-title">On this page</p>
+        {{ $p.TableOfContents }}
+      </div>
+    </aside>
+    {{- end }}
+  </div>
+</div>

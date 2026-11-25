@@ -1,0 +1,79 @@
+# Hugo configuration for the Mavis documentation site.
+# Build: make docs    Preview: make docs-serve
+baseURL = "https://thorstenkramm.github.io/mavis/"
+locale = "en"
+defaultContentLanguage = "en"
+title = "Mavis"
+theme = "mavis"
+enableRobotsTXT = true
+# Makefile enables this automatically once the repository has a commit.
+enableGitInfo = false
+disableKinds = ["taxonomy", "term"]
+
+[params]
+  description = "Serve a directory of Markdown and supporting files as a browsable, readable documentation site."
+  repository = "https://github.com/thorstenkramm/mavis"
+  editBase = "https://github.com/thorstenkramm/mavis/edit/main/docs/content/"
+  releases = "https://github.com/thorstenkramm/mavis/releases/latest"
+
+[[menus.docs]]
+  name = "Getting started"
+  pageRef = "/getting-started"
+  weight = 10
+[[menus.docs]]
+  name = "Guides"
+  pageRef = "/guides"
+  weight = 20
+[[menus.docs]]
+  name = "Reference"
+  pageRef = "/reference"
+  weight = 30
+
+[[menus.main]]
+  name = "Getting started"
+  pageRef = "/getting-started"
+  weight = 10
+[[menus.main]]
+  name = "Guides"
+  pageRef = "/guides"
+  weight = 20
+[[menus.main]]
+  name = "Reference"
+  pageRef = "/reference"
+  weight = 30
+
+[outputFormats.searchindex]
+  mediaType = "application/json"
+  baseName = "search-index"
+  isPlainText = true
+  notAlternative = true
+
+[outputs]
+  home = ["html", "searchindex"]
+  section = ["html"]
+  page = ["html"]
+
+[markup.goldmark.renderer]
+  # Documentation maintained in this repository may use <details>.
+  unsafe = true
+[markup.goldmark.parser.attribute]
+  block = true
+[markup.highlight]
+  noClasses = false
+  lineNos = false
+[markup.tableOfContents]
+  startLevel = 2
+  endLevel = 3
+
+[[module.mounts]]
+  source = "assets"
+  target = "assets"
+[[module.mounts]]
+  source = "content"
+  target = "content"
+[[module.mounts]]
+  source = "static"
+  target = "static"
+[[module.mounts]]
+  source = "layouts"
+  target = "layouts"

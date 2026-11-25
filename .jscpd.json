@@ -1,0 +1,22 @@
+{
+  "minLines": 10,
+  "minTokens": 50,
+  "threshold": 0,
+  "reporters": [
+    "console"
+  ],
+  "format": [
+    "go",
+    "markup"
+  ],
+  "ignore": [
+    "**/*_test.go",
+    "**/vendor/**",
+    "**/.cache/**",
+    "**/.agents/**",
+    "**/docs/public/**",
+    "**/docs/resources/**",
+    "**/docs/assets/generated/**",
+    "**/docs/themes/mavis/assets/vendor/**"
+  ]
+}

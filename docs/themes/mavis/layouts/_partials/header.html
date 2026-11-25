@@ -1,0 +1,42 @@
+<header class="mv-header" uk-sticky="sel-target: .uk-navbar-container; cls-active: mv-header-stuck">
+  <nav class="uk-navbar-container mv-navbar" aria-label="Main">
+    <div class="uk-container uk-container-expand">
+      <div uk-navbar="mode: click">
+        <div class="uk-navbar-left">
+          {{- if not .IsHome }}
+          <button class="uk-navbar-toggle mv-icon-button uk-hidden@m" type="button" uk-toggle="target: #mv-offcanvas"
+                  aria-label="Open navigation" aria-controls="mv-offcanvas"><span uk-navbar-toggle-icon></span></button>
+          {{- end }}
+          <a class="uk-navbar-item uk-logo mv-logo" href="{{ "/" | relURL }}" aria-label="Mavis home">
+            <span>mavis</span>
+          </a>
+          <ul class="uk-navbar-nav uk-visible@m">
+            {{- $current := . }}
+            {{- range site.Menus.main }}
+            {{- $active := or ($current.IsMenuCurrent "main" .) ($current.HasMenuCurrent "main" .) (and .Page ($current.IsDescendant .Page)) }}
+            <li{{ if $active }} class="uk-active"{{ end }}><a href="{{ .URL }}"{{ if $active }} aria-current="page"{{ end }}>{{ .Name }}</a></li>
+            {{- end }}
+          </ul>
+        </div>
+        <div class="uk-navbar-right">
+          <div class="uk-navbar-item mv-search" role="search">
+            <form class="uk-search uk-search-default" action="#" onsubmit="return false">
+              <span uk-search-icon></span>
+              <input id="mv-search-input" class="uk-search-input" type="search" placeholder="Search docs" aria-label="Search the documentation"
+                     role="combobox" aria-autocomplete="list" aria-haspopup="listbox"
+                     autocomplete="off" spellcheck="false" aria-controls="mv-search-results" aria-expanded="false">
+              <kbd class="mv-kbd uk-visible@s" aria-hidden="true">/</kbd>
+            </form>
+            <div id="mv-search-results" class="mv-search-results" role="listbox" hidden></div>
+          </div>
+          <button class="uk-navbar-item mv-icon-button mv-theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="mv-when-light" uk-icon="icon: mv-moon"></span><span class="mv-when-dark" uk-icon="icon: mv-sun"></span>
+          </button>
+          <a class="uk-navbar-item mv-icon-button uk-visible@s" href="{{ site.Params.repository }}" aria-label="Mavis on GitHub" title="Mavis on GitHub">
+            <span uk-icon="icon: github"></span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+</header>

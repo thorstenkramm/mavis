@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: package and smoke (${{ matrix.goos }}/${{ matrix.goarch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            executable: mavis
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            executable: mavis
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            executable: mavis
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            executable: mavis
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            executable: mavis.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Package native release artifact
+        shell: bash
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$ ]] || { echo 'Invalid release tag'; exit 1; }
+          go run scripts/package-release.go \
+            -version "$GITHUB_REF_NAME" \
+            -goos "${{ matrix.goos }}" \
+            -goarch "${{ matrix.goarch }}" \
+            -output dist
+
+      - name: Verify archive and smoke-test the extracted native binary
+        shell: bash
+        run: |
+          base="mavis-${GITHUB_REF_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          archive="${base}.tar.gz"
+          if [[ '${{ matrix.goos }}' == windows ]]; then archive="${base}.zip"; fi
+          (cd dist && python -c 'import hashlib,pathlib,sys; p=pathlib.Path(sys.argv[1]); sys.exit(hashlib.sha256(p.read_bytes()).hexdigest() != pathlib.Path(str(p)+".sha256").read_text().split()[0])' "$archive")
+          mkdir unpacked
+          if [[ '${{ matrix.goos }}' == windows ]]; then
+            python -m zipfile -e "dist/$archive" unpacked
+          else
+            tar -xzf "dist/$archive" -C unpacked
+          fi
+          python scripts/check-packaged-docs.py "unpacked/$base"
+          go run scripts/smoke-release.go -binary "unpacked/$base/${{ matrix.executable }}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 14
+          if-no-files-found: error
+
+  publish:
+    permissions:
+      contents: write
+    name: publish release archives
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
