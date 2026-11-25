@@ -21,7 +21,14 @@ Archives are named `mavis-VERSION-OS-ARCH`, where `VERSION` includes the leading
 
 The binaries do **not** require Go, a language runtime, a package installation, or the repository. Each archive contains
 the executable, README, quick start, installation and serving guides, and CLI, configuration, security, platform,
-Markdown, and browser compatibility references. A separate `.sha256` file accompanies every archive.
+Markdown, and browser compatibility references.
+
+The release page shows the SHA-256 digest next to every archive. With the [GitHub CLI](https://cli.github.com/), list
+the digests of a release:
+
+```shell
+gh release view v1.0.0 -R thorstenkramm/mavis --json assets --jq '.assets[] | "\(.digest)  \(.name)"'
+```
 
 ### macOS and Linux
 
@@ -30,19 +37,18 @@ downloaded.
 
 ```shell
 curl -fLO https://github.com/thorstenkramm/mavis/releases/download/v1.0.0/mavis-v1.0.0-darwin-arm64.tar.gz
-curl -fLO https://github.com/thorstenkramm/mavis/releases/download/v1.0.0/mavis-v1.0.0-darwin-arm64.tar.gz.sha256
 ```
 
-Verify the checksum on macOS:
+Compute the checksum and compare it with the digest on the release page. On macOS:
 
 ```shell
-shasum -a 256 -c mavis-v1.0.0-darwin-arm64.tar.gz.sha256
+shasum -a 256 mavis-v1.0.0-darwin-arm64.tar.gz
 ```
 
 Or on Linux:
 
 ```shell
-sha256sum -c mavis-v1.0.0-linux-amd64.tar.gz.sha256
+sha256sum mavis-v1.0.0-linux-amd64.tar.gz
 ```
 
 Extract and run the binary:
@@ -58,11 +64,12 @@ security policy before allowing it. Mavis does not ask you to bypass signatures 
 
 ### Windows
 
-In PowerShell, replace the example version with your downloaded release tag:
+In PowerShell, replace the example version with your downloaded release tag and `$expected` with the digest shown on
+the release page, without the `sha256:` prefix:
 
 ```powershell
 $archive = '.\mavis-v1.0.0-windows-amd64.zip'
-$expected = ((Get-Content "$archive.sha256" -Raw) -split '\s+')[0]
+$expected = 'DIGEST-FROM-RELEASE-PAGE'
 if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne $expected) { throw 'Checksum mismatch' }
 Expand-Archive -LiteralPath $archive -DestinationPath .
 ```
@@ -104,11 +111,9 @@ without publishing:
 ```shell
 goreleaser check
 goreleaser release --snapshot --clean --skip=publish
-python3 scripts/format-release-checksums.py dist
 ```
 
-The checksum helper verifies every digest and adds the archive filename required by the `shasum -c` and `sha256sum -c`
-commands above. `scripts/smoke-release.go` checks an extracted binary on its native operating system.
+`scripts/smoke-release.go` checks an extracted binary on its native operating system.
 
 Tag-driven GitHub Actions builds without publishing, verifies the packaged documentation and native binary on all five
 target platforms, and only then creates the GitHub release from those exact archives and generated release notes. Tags

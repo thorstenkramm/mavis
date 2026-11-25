@@ -37,9 +37,9 @@ archives:
       - docs/content
       - testdata/docs
 
+# GitHub publishes a SHA-256 digest for every release asset.
 checksum:
-  algorithm: sha256
-  split: true
+  disable: true
 
 snapshot:
   version_template: "{{ .Version }}-next"

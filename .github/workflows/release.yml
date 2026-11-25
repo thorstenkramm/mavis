@@ -35,9 +35,6 @@ jobs:
           version: 'v2.13.2'
           args: release --clean --skip=publish
 
-      - name: Verify and format split checksums
-        run: python scripts/format-release-checksums.py dist
-
       # Without an earlier tag, GoReleaser lists the entire repository history.
       - name: Check generated release notes
         run: |
@@ -52,7 +49,6 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.zip
-            dist/*.sha256
             dist/CHANGELOG.md
           retention-days: 14
           if-no-files-found: error
@@ -97,13 +93,12 @@ jobs:
           name: release-files
           path: dist
 
-      - name: Verify checksum, extract archive, and smoke-test the native binary
+      - name: Extract archive and smoke-test the native binary
         shell: bash
         run: |
           base="mavis-${GITHUB_REF_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
           archive="${base}.tar.gz"
           if [[ '${{ matrix.goos }}' == windows ]]; then archive="${base}.zip"; fi
-          python scripts/format-release-checksums.py --check --archive "$archive" dist
           mkdir unpacked
           if [[ '${{ matrix.goos }}' == windows ]]; then
             python -m zipfile -e "dist/$archive" unpacked
@@ -134,4 +129,4 @@ jobs:
           # Only a hyphen before any "+build" metadata marks a prerelease.
           version="${GITHUB_REF_NAME%%+*}"
           if [[ "$version" == *-* ]]; then arguments+=(--prerelease); fi
-          gh release create "${arguments[@]}" dist/*.tar.gz dist/*.zip dist/*.sha256
+          gh release create "${arguments[@]}" dist/*.tar.gz dist/*.zip
